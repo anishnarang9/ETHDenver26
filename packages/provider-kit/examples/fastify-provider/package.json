@@ -1,0 +1,13 @@
+{
+  "name": "@kite-stack/provider-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "@kite-stack/provider-kit": "workspace:*",
+    "fastify": "^5.2.1",
+    "tsx": "^4.19.2"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "agent-passport-commerce-stack",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Agent Passport + x402 enforcement reference implementation on Kite",
+  "license": "MIT",
+  "packageManager": "pnpm@9.12.2",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "dev:web": "pnpm --filter @kite-stack/web dev",
+    "dev:gateway": "pnpm --filter @kite-stack/gateway dev",
+    "dev:runner": "pnpm --filter @kite-stack/runner dev",
+    "db:generate": "pnpm --filter @kite-stack/db prisma:generate",
+    "db:migrate": "pnpm --filter @kite-stack/db prisma:migrate"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}

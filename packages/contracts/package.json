@@ -1,0 +1,19 @@
+{
+  "name": "@kite-stack/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "hardhat compile",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "hardhat test",
+    "deploy:kite-testnet": "hardhat run scripts/deploy.ts --network kiteTestnet"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.1.0",
+    "dotenv": "^16.4.7",
+    "hardhat": "^2.26.1",
+    "solc": "^0.8.24",
+    "typescript": "^5.9.2"
+  }
+}

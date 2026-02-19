@@ -1,0 +1,150 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Agent {
+  id              String             @id @default(cuid())
+  agentAddress    String             @unique
+  ownerAddress    String
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  passportHistory PassportSnapshot[]
+  sessions        Session[]
+  actionAttempts  ActionAttempt[]
+  receipts        Receipt[]
+}
+
+model PassportSnapshot {
+  id             String   @id @default(cuid())
+  agentId        String
+  onchainVersion Int      @default(1)
+  expiresAt      DateTime
+  perCallCap     Decimal  @db.Decimal(78, 0)
+  dailyCap       Decimal  @db.Decimal(78, 0)
+  rateLimitPerMin Int
+  scopesJson     Json
+  servicesJson   Json
+  revoked        Boolean  @default(false)
+  txHash         String?
+  createdAt      DateTime @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, createdAt])
+}
+
+model Session {
+  id             String   @id @default(cuid())
+  agentId        String
+  sessionAddress String   @unique
+  expiresAt      DateTime
+  revoked        Boolean  @default(false)
+  scopeSubsetJson Json
+  txHash         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, expiresAt])
+}
+
+model ActionAttempt {
+  id               String             @id @default(cuid())
+  actionId         String             @unique
+  agentId          String
+  routeId          String
+  status           String
+  quoteExpiresAt   DateTime?
+  quoteAmount      Decimal?           @db.Decimal(78, 0)
+  quoteAsset       String?
+  protocolMode     String             @default("dual")
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  paymentQuote     PaymentQuote?
+  paymentSettlement PaymentSettlement?
+  events           EnforcementEvent[]
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, routeId, createdAt])
+}
+
+model PaymentQuote {
+  id               String   @id @default(cuid())
+  actionAttemptId  String   @unique
+  payTo            String
+  amount           Decimal  @db.Decimal(78, 0)
+  asset            String
+  facilitatorUrl   String
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+
+  actionAttempt ActionAttempt @relation(fields: [actionAttemptId], references: [id], onDelete: Cascade)
+}
+
+model PaymentSettlement {
+  id               String   @id @default(cuid())
+  actionAttemptId  String   @unique
+  txHash           String?  @unique
+  settlementRef    String?
+  payer            String
+  recipient        String
+  amount           Decimal  @db.Decimal(78, 0)
+  asset            String
+  verificationMode String
+  verifiedAt       DateTime @default(now())
+
+  actionAttempt ActionAttempt @relation(fields: [actionAttemptId], references: [id], onDelete: Cascade)
+}
+
+model Receipt {
+  id               String   @id @default(cuid())
+  actionId         String
+  agentId          String
+  payer            String
+  asset            String
+  amount           Decimal  @db.Decimal(78, 0)
+  routeId          String
+  paymentRef       String
+  metadataHash     String
+  onchainTxHash    String?
+  onchainReceiptId String?
+  createdAt        DateTime @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([actionId, paymentRef])
+  @@index([agentId, createdAt])
+}
+
+model EnforcementEvent {
+  id              String   @id @default(cuid())
+  actionAttemptId String
+  actionId        String
+  agentAddress    String
+  routeId         String
+  eventType       String
+  detailsJson     Json
+  createdAt       DateTime @default(now())
+
+  actionAttempt ActionAttempt @relation(fields: [actionAttemptId], references: [id], onDelete: Cascade)
+
+  @@index([agentAddress, createdAt])
+  @@index([actionId, createdAt])
+}
+
+model Nonce {
+  id             String   @id @default(cuid())
+  sessionAddress String
+  nonce          String
+  usedAt         DateTime @default(now())
+
+  @@unique([sessionAddress, nonce])
+  @@index([sessionAddress, usedAt])
+}
