@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { ethers, Wallet } from "ethers";
+import { z } from "zod";
 import { prisma } from "@kite-stack/db";
 import {
   DefaultSignatureVerifier,
@@ -17,6 +18,7 @@ import {
 } from "./contracts.js";
 import { KitePaymentService } from "./payment.js";
 import { proxyWeatherRequest } from "./upstream/weatherProxy.js";
+import { proxyX402Request } from "./upstream/x402Proxy.js";
 import {
   InMemoryRateLimiter,
   PrismaBudgetService,
@@ -51,7 +53,56 @@ const routePolicies = getRoutePolicies(config.ROUTE_POLICY_PROFILE, {
   premiumIntelPriceAtomic: config.TEST_PRICE_PREMIUM_ATOMIC,
   kiteWeatherProxyPriceAtomic: config.TEST_PRICE_WEATHER_KITE_ATOMIC,
   weatherFallbackProxyPriceAtomic: config.TEST_PRICE_WEATHER_FALLBACK_ATOMIC,
+  x402ProxyPriceAtomic: config.TEST_PRICE_X402_PROXY_ATOMIC,
 });
+
+const ProxyRequestSchema = z.object({
+  upstreamUrl: z.string().url(),
+  method: z.enum(["GET", "POST"]).optional().default("GET"),
+  query: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
+  body: z.unknown().optional(),
+});
+
+const allowedProxyHosts = new Set(
+  config.X402_PROXY_ALLOWED_HOSTS.split(",")
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+const isAllowedProxyHost = (url: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    return allowedProxyHosts.has(parsed.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+};
+
+const isKiteWeatherUpstream = (url: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.toLowerCase() === "x402.dev.gokite.ai" && parsed.pathname.startsWith("/api/weather");
+  } catch {
+    return false;
+  }
+};
+
+const hasGokiteAaChallenge = (payload: unknown): boolean => {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return false;
+  }
+  const accepts = (payload as { accepts?: unknown }).accepts;
+  if (!Array.isArray(accepts)) {
+    return false;
+  }
+  return accepts.some((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      return false;
+    }
+    const item = entry as { scheme?: unknown; network?: unknown };
+    return item.scheme === "gokite-aa" && item.network === "kite-testnet";
+  });
+};
 
 const enforcer = createRouteEnforcer({
   routePolicies,
@@ -219,6 +270,82 @@ app.post(
   }
 );
 
+app.post(
+  "/api/x402-proxy",
+  { config: { routeId: "api.x402-proxy" }, preHandler: [enforcer] },
+  async (request, reply) => {
+    const parsed = ProxyRequestSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "Invalid proxy request body",
+        issues: parsed.error.issues,
+        gatewayActionId: request.enforcementContext?.actionId,
+      });
+      return;
+    }
+
+    const input = parsed.data;
+    if (!isAllowedProxyHost(input.upstreamUrl)) {
+      reply.status(403).send({
+        code: "UPSTREAM_HOST_BLOCKED",
+        message: "upstreamUrl host is not allowed by gateway policy",
+        gatewayActionId: request.enforcementContext?.actionId,
+      });
+      return;
+    }
+
+    try {
+      const upstream = await proxyX402Request({
+        upstreamUrl: input.upstreamUrl,
+        method: input.method,
+        query: input.query,
+        body: input.body,
+        requestHeaders: request.headers as Record<string, unknown>,
+        gatewayActionId: request.enforcementContext?.actionId,
+        timeoutMs: config.WEATHER_PROXY_TIMEOUT_MS,
+      });
+
+      const location = typeof input.query?.location === "string" ? input.query.location : undefined;
+      const shouldFallbackForWeather =
+        upstream.statusCode === 402 &&
+        !!location &&
+        isKiteWeatherUpstream(input.upstreamUrl) &&
+        hasGokiteAaChallenge(upstream.payload);
+
+      if (shouldFallbackForWeather) {
+        const fallback = await proxyWeatherRequest({
+          upstreamUrl: `${config.WEATHER_FALLBACK_BASE_URL.replace(/\/$/, "")}/api/weather`,
+          location,
+          requestHeaders: request.headers as Record<string, unknown>,
+          gatewayActionId: request.enforcementContext?.actionId,
+          timeoutMs: config.WEATHER_PROXY_TIMEOUT_MS,
+        });
+
+        for (const [key, value] of Object.entries(fallback.responseHeaders)) {
+          reply.header(key, value);
+        }
+
+        reply.header("x-proxy-mode", "weather-fallback");
+        reply.status(fallback.statusCode).send(fallback.payload);
+        return;
+      }
+
+      for (const [key, value] of Object.entries(upstream.responseHeaders)) {
+        reply.header(key, value);
+      }
+
+      reply.status(upstream.statusCode).send(upstream.payload);
+    } catch (error) {
+      reply.status(502).send({
+        code: "UPSTREAM_UNAVAILABLE",
+        message: (error as Error).message,
+        gatewayActionId: request.enforcementContext?.actionId,
+      });
+    }
+  }
+);
+
 registerOperationalRoutes(app, { prismaClient: prisma, passportClient });
 
 const start = async () => {
@@ -233,6 +360,8 @@ const start = async () => {
     premiumPriceAtomic: routePolicies["api.premium-intel"]?.priceAtomic,
     kiteWeatherProxyPriceAtomic: routePolicies["api.kite-weather-proxy"]?.priceAtomic,
     weatherFallbackProxyPriceAtomic: routePolicies["api.weather-fallback-proxy"]?.priceAtomic,
+    x402ProxyPriceAtomic: routePolicies["api.x402-proxy"]?.priceAtomic,
+    x402ProxyAllowedHosts: [...allowedProxyHosts],
   }, "Gateway running");
 };
 

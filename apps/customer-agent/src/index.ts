@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
-import { Contract, JsonRpcProvider, Wallet } from "ethers";
+import { Contract, JsonRpcProvider, Wallet, hexlify, randomBytes } from "ethers";
 import { wrapFetchWithPayment } from "@x402/fetch";
 import { x402Client } from "@x402/core/client";
 import type { PaymentRequired, PaymentRequirements } from "@x402/core/types";
@@ -13,6 +13,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import {
   PAYMENT_REQUIRED_HEADER,
   X_ACTION_ID_HEADER,
+  X_PAYMENT_HEADER,
   X_TX_HASH_HEADER,
   type PaymentChallenge,
 } from "@kite-stack/shared-types";
@@ -39,7 +40,9 @@ const ConfigSchema = z.object({
   CUSTOMER_SESSION_PRIVATE_KEY: z.string().optional(),
   CUSTOMER_PAYMENT_PRIVATE_KEY: z.string().optional(),
   CUSTOMER_LOCATION: z.string().optional().default("New York"),
-  CUSTOMER_PRIMARY_ROUTE: z.string().optional().default("/api/weather-kite"),
+  CUSTOMER_PRIMARY_ROUTE: z.string().optional().default("/api/x402-proxy"),
+  CUSTOMER_PRIMARY_UPSTREAM_URL: z.string().optional().default("https://x402.dev.gokite.ai/api/weather"),
+  CUSTOMER_PRIMARY_METHOD: z.enum(["GET", "POST"]).optional().default("GET"),
   CUSTOMER_FALLBACK_ROUTE: z.string().optional().default("/api/weather-fallback"),
   CUSTOMER_ENABLE_GOKITE_AA: z
     .string()
@@ -194,6 +197,85 @@ const parseChallenge = (response: Response, payload: unknown): PaymentChallenge 
   return null;
 };
 
+type GokitePaymentOffer = PaymentRequirements & {
+  maxAmountRequired?: string;
+  maxTimeoutSeconds?: number;
+};
+
+const resolveGokiteAmount = (offer: GokitePaymentOffer): string => {
+  if (typeof offer.maxAmountRequired === "string" && offer.maxAmountRequired.length > 0) {
+    return offer.maxAmountRequired;
+  }
+  const amount = (offer as { amount?: unknown }).amount;
+  if (typeof amount === "string" && amount.length > 0) {
+    return amount;
+  }
+  throw new Error("gokite-aa offer missing maxAmountRequired");
+};
+
+const createLegacyGokiteXPayment = async (offer: GokitePaymentOffer): Promise<string> => {
+  const nowSeconds = BigInt(Math.floor(Date.now() / 1000));
+  const timeoutSeconds =
+    typeof offer.maxTimeoutSeconds === "number" && offer.maxTimeoutSeconds > 0
+      ? BigInt(offer.maxTimeoutSeconds)
+      : 300n;
+  const payerAddress =
+    (config.CUSTOMER_KITE_AA_PAYER_ADDRESS as `0x${string}` | undefined) ??
+    (paymentWalletInfo.wallet.address as `0x${string}`);
+  const amount = resolveGokiteAmount(offer);
+
+  const authorization = {
+    from: payerAddress,
+    to: offer.payTo,
+    token: offer.asset,
+    value: amount,
+    validAfter: (nowSeconds - 60n).toString(),
+    validBefore: (nowSeconds + timeoutSeconds).toString(),
+    nonce: hexlify(randomBytes(32)),
+  };
+
+  const signature = await agentWalletInfo.wallet.signTypedData(
+    {
+      name: "GokiteAccount",
+      version: "1",
+      chainId: BigInt(config.CUSTOMER_KITE_AA_CHAIN_ID),
+      verifyingContract: payerAddress,
+    },
+    {
+      TransferWithAuthorization: [
+        { name: "from", type: "address" },
+        { name: "to", type: "address" },
+        { name: "token", type: "address" },
+        { name: "value", type: "uint256" },
+        { name: "validAfter", type: "uint256" },
+        { name: "validBefore", type: "uint256" },
+        { name: "nonce", type: "bytes32" },
+      ],
+    },
+    {
+      from: authorization.from,
+      to: authorization.to,
+      token: authorization.token,
+      value: BigInt(authorization.value),
+      validAfter: BigInt(authorization.validAfter),
+      validBefore: BigInt(authorization.validBefore),
+      nonce: authorization.nonce,
+    }
+  );
+
+  const payload: Record<string, unknown> = {
+    authorization,
+    signature,
+    network: offer.network,
+  };
+
+  if (config.CUSTOMER_KITE_AA_SESSION_ID) {
+    payload.sessionId = config.CUSTOMER_KITE_AA_SESSION_ID;
+  }
+
+  return Buffer.from(JSON.stringify(payload)).toString("base64");
+};
+
 type WalletEnvKey =
   | "CUSTOMER_AGENT_PRIVATE_KEY"
   | "CUSTOMER_SESSION_PRIVATE_KEY"
@@ -291,7 +373,15 @@ const isPrimarySettleable = (payload: unknown): boolean => {
 };
 
 const run = async () => {
-  const requestBody = { location: config.CUSTOMER_LOCATION };
+  const primaryRequestBody =
+    config.CUSTOMER_PRIMARY_ROUTE === "/api/x402-proxy"
+      ? {
+          upstreamUrl: config.CUSTOMER_PRIMARY_UPSTREAM_URL,
+          method: config.CUSTOMER_PRIMARY_METHOD,
+          query: { location: config.CUSTOMER_LOCATION },
+        }
+      : { location: config.CUSTOMER_LOCATION };
+  const fallbackRequestBody = { location: config.CUSTOMER_LOCATION };
 
   console.log("[customer-agent] onboarding addresses");
   console.log(`owner will register these in web UI (agent/session only)`);
@@ -308,17 +398,20 @@ const run = async () => {
   let primaryResponse: Response | null = null;
   let primaryPayload: unknown = null;
   let primaryError: Error | null = null;
+  const primaryActionId = randomUUID();
 
-  if (config.CUSTOMER_ENABLE_X402_AUTOPAY) {
+  const canUseAutomaticX402 =
+    config.CUSTOMER_ENABLE_X402_AUTOPAY && config.CUSTOMER_PRIMARY_ROUTE !== "/api/x402-proxy";
+
+  if (canUseAutomaticX402) {
     try {
-      const actionId = randomUUID();
       primaryResponse = await gatewayFetchWithX402(`${config.GATEWAY_BASE_URL}${config.CUSTOMER_PRIMARY_ROUTE}`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          [X_ACTION_ID_HEADER]: actionId,
+          [X_ACTION_ID_HEADER]: primaryActionId,
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify(primaryRequestBody),
       });
       primaryPayload = await parseJsonSafe(primaryResponse);
     } catch (error) {
@@ -327,8 +420,8 @@ const run = async () => {
   } else {
     const primary = await postGateway({
       route: config.CUSTOMER_PRIMARY_ROUTE,
-      body: requestBody,
-      actionId: randomUUID(),
+      body: primaryRequestBody,
+      actionId: primaryActionId,
     });
     primaryResponse = primary.response;
     primaryPayload = primary.payload;
@@ -338,11 +431,38 @@ const run = async () => {
     console.log(`[customer-agent] primary x402 settlement failed: ${shorten(primaryError.message)}`);
     const diagnostic = await postGateway({
       route: config.CUSTOMER_PRIMARY_ROUTE,
-      body: requestBody,
-      actionId: randomUUID(),
+      body: primaryRequestBody,
+      actionId: primaryActionId,
     });
     primaryResponse = diagnostic.response;
     primaryPayload = diagnostic.payload;
+  }
+
+  if (primaryResponse?.status === 402 && config.CUSTOMER_ENABLE_GOKITE_AA) {
+    const paymentRequired = asPaymentRequired(primaryPayload);
+    const gokiteOffer =
+      paymentRequired?.accepts.find(
+        (offer) => offer.scheme === "gokite-aa" && offer.network === config.CUSTOMER_KITE_AA_NETWORK
+      ) ?? null;
+
+    if (gokiteOffer) {
+      try {
+        const xPayment = await createLegacyGokiteXPayment(gokiteOffer as GokitePaymentOffer);
+        const retryActionId = asString((primaryPayload as { actionId?: unknown } | null)?.actionId) ?? primaryActionId;
+        const retry = await postGateway({
+          route: config.CUSTOMER_PRIMARY_ROUTE,
+          body: primaryRequestBody,
+          actionId: retryActionId,
+          extraHeaders: {
+            [X_PAYMENT_HEADER]: xPayment,
+          },
+        });
+        primaryResponse = retry.response;
+        primaryPayload = retry.payload;
+      } catch (error) {
+        primaryError = error as Error;
+      }
+    }
   }
 
   if (primaryResponse?.ok) {
@@ -352,6 +472,33 @@ const run = async () => {
   }
 
   if (primaryResponse?.status === 402) {
+    const directChallenge = parseChallenge(primaryResponse, primaryPayload);
+    if (directChallenge) {
+      console.log(
+        `[customer-agent] primary direct challenge actionId=${directChallenge.actionId} payTo=${directChallenge.payTo} amount=${directChallenge.amountAtomic}`
+      );
+      const directTxHash = await payDirectTransfer(directChallenge);
+      const primaryRetry = await postGateway({
+        route: config.CUSTOMER_PRIMARY_ROUTE,
+        body: primaryRequestBody,
+        actionId: directChallenge.actionId,
+        extraHeaders: {
+          [X_TX_HASH_HEADER]: directTxHash,
+        },
+      });
+      primaryResponse = primaryRetry.response;
+      primaryPayload = primaryRetry.payload;
+      if (primaryResponse.ok) {
+        console.log("[customer-agent] primary weather succeeded");
+        console.log(JSON.stringify(primaryPayload, null, 2));
+        console.log(`[customer-agent] evidence txHash=${directTxHash}`);
+        return;
+      }
+    }
+  }
+
+  if (primaryResponse?.status === 402) {
+    console.log(`[customer-agent] primary 402 payload=${JSON.stringify(primaryPayload)}`);
     const paymentRequired = asPaymentRequired(primaryPayload);
     if (paymentRequired) {
       const options = summarizePaymentOptions(paymentRequired);
@@ -380,7 +527,7 @@ const run = async () => {
   console.log(`[customer-agent] step=2 route=${config.CUSTOMER_FALLBACK_ROUTE} attempt=fallback`);
   const firstFallback = await postGateway({
     route: config.CUSTOMER_FALLBACK_ROUTE,
-    body: requestBody,
+    body: fallbackRequestBody,
     actionId: randomUUID(),
   });
 
@@ -404,7 +551,7 @@ const run = async () => {
 
   const secondFallback = await postGateway({
     route: config.CUSTOMER_FALLBACK_ROUTE,
-    body: requestBody,
+    body: fallbackRequestBody,
     actionId: challenge.actionId,
     extraHeaders: {
       [X_TX_HASH_HEADER]: txHash,

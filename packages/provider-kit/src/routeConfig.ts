@@ -7,6 +7,7 @@ export interface RoutePolicyOverrides {
   premiumIntelPriceAtomic?: string;
   kiteWeatherProxyPriceAtomic?: string;
   weatherFallbackProxyPriceAtomic?: string;
+  x402ProxyPriceAtomic?: string;
 }
 
 const assertAtomic = (value: string, label: string): string => {
@@ -30,12 +31,14 @@ export const getRoutePolicies = (
           premiumIntelPriceAtomic: "5000",
           kiteWeatherProxyPriceAtomic: "2000",
           weatherFallbackProxyPriceAtomic: "2000",
+          x402ProxyPriceAtomic: "2000",
         }
       : {
           enrichWalletPriceAtomic: "1000000",
           premiumIntelPriceAtomic: "5000000",
           kiteWeatherProxyPriceAtomic: "2000000",
           weatherFallbackProxyPriceAtomic: "2000000",
+          x402ProxyPriceAtomic: "2000000",
         };
 
   const prices = {
@@ -54,6 +57,10 @@ export const getRoutePolicies = (
     weatherFallbackProxyPriceAtomic: assertAtomic(
       overrides.weatherFallbackProxyPriceAtomic ?? defaults.weatherFallbackProxyPriceAtomic,
       "weatherFallbackProxyPriceAtomic"
+    ),
+    x402ProxyPriceAtomic: assertAtomic(
+      overrides.x402ProxyPriceAtomic ?? defaults.x402ProxyPriceAtomic,
+      "x402ProxyPriceAtomic"
     ),
   };
 
@@ -90,6 +97,16 @@ export const getRoutePolicies = (
       // Pass-through billing mode: policy checks are enforced in gateway but payment is upstream.
       priceAtomic: prices.weatherFallbackProxyPriceAtomic,
       rateLimitPerMin: 10,
+      requirePayment: false,
+    },
+    "api.x402-proxy": {
+      routeId: "api.x402-proxy",
+      // Reuse existing weather scope/service to avoid forcing immediate passport/session re-grants.
+      scope: "weather.kite.read",
+      service: "external.kite.weather",
+      // Pass-through billing mode: upstream x402 endpoint is responsible for charging/settlement.
+      priceAtomic: prices.x402ProxyPriceAtomic,
+      rateLimitPerMin: 20,
       requirePayment: false,
     },
   };

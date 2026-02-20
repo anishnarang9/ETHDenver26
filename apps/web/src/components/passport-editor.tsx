@@ -22,10 +22,10 @@ export function PassportEditor(props: {
   const [agentAddress, setAgentAddress] = useState("");
   const [sessionAddress, setSessionAddress] = useState("");
   const [scopes, setScopes] = useState(
-    "enrich.wallet,premium.intel,weather.kite.read,weather.fallback.read"
+    "enrich.wallet,premium.intel,weather.kite.read,weather.fallback.read,x402.proxy"
   );
   const [services, setServices] = useState(
-    "internal.enrich,external.premium,external.kite.weather,external.fallback.weather"
+    "internal.enrich,external.premium,external.kite.weather,external.fallback.weather,external.x402"
   );
   const [expiresInHours, setExpiresInHours] = useState("24");
   const [perCallCap, setPerCallCap] = useState("5000000");

@@ -24,6 +24,7 @@ const EnvSchema = z.object({
   TEST_PRICE_PREMIUM_ATOMIC: optionalAtomic,
   TEST_PRICE_WEATHER_KITE_ATOMIC: optionalAtomic,
   TEST_PRICE_WEATHER_FALLBACK_ATOMIC: optionalAtomic,
+  TEST_PRICE_X402_PROXY_ATOMIC: optionalAtomic,
   MAX_KITE_SPEND_PER_DAY: z.string().optional().default("0.05"),
   FACILITATOR_URL: z.string().optional().default(""),
   EXPLORER_BASE_URL: z.string().optional().default(""),
@@ -31,6 +32,7 @@ const EnvSchema = z.object({
   PREMIUM_API_KEY: z.string().optional().default(""),
   WEATHER_UPSTREAM_URL: z.string().optional().default("https://x402.dev.gokite.ai/api/weather"),
   WEATHER_FALLBACK_BASE_URL: z.string().optional().default("http://localhost:4102"),
+  X402_PROXY_ALLOWED_HOSTS: z.string().optional().default("x402.dev.gokite.ai,localhost,127.0.0.1"),
   WEATHER_PROXY_TIMEOUT_MS: z.coerce.number().int().positive().optional().default(15000),
 });
 
