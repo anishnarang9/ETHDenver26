@@ -19,10 +19,14 @@ export function PassportEditor(props: {
   onAgentChanged: (agent: string) => void;
   onAction: (message: string) => void;
 }) {
-  const [agentAddress, setAgentAddress] = useState(() => Wallet.createRandom().address);
-  const [sessionAddress, setSessionAddress] = useState(() => Wallet.createRandom().address);
-  const [scopes, setScopes] = useState("enrich.wallet,premium.intel");
-  const [services, setServices] = useState("internal.enrich,external.premium");
+  const [agentAddress, setAgentAddress] = useState("");
+  const [sessionAddress, setSessionAddress] = useState("");
+  const [scopes, setScopes] = useState(
+    "enrich.wallet,premium.intel,weather.kite.read,weather.fallback.read"
+  );
+  const [services, setServices] = useState(
+    "internal.enrich,external.premium,external.kite.weather,external.fallback.weather"
+  );
   const [expiresInHours, setExpiresInHours] = useState("24");
   const [perCallCap, setPerCallCap] = useState("5000000");
   const [dailyCap, setDailyCap] = useState("50000000");
@@ -34,7 +38,27 @@ export function PassportEditor(props: {
     return Math.floor(Date.now() / 1000) + hours * 3600;
   }, [expiresInHours]);
 
+  const ensureAgentInput = (): boolean => {
+    if (!agentAddress || !agentAddress.startsWith("0x")) {
+      setStatus("Set a valid agent address from your customer-agent script before writing on-chain.");
+      return false;
+    }
+    return true;
+  };
+
+  const ensureSessionInput = (): boolean => {
+    if (!sessionAddress || !sessionAddress.startsWith("0x")) {
+      setStatus("Set a valid session address from your customer-agent script before granting session.");
+      return false;
+    }
+    return true;
+  };
+
   const handleUpsert = async () => {
+    if (!ensureAgentInput()) {
+      return;
+    }
+
     try {
       const result = await upsertPassportOnchain({
         agentAddress,
@@ -58,6 +82,10 @@ export function PassportEditor(props: {
   };
 
   const handleSessionGrant = async () => {
+    if (!ensureAgentInput() || !ensureSessionInput()) {
+      return;
+    }
+
     try {
       const result = await grantSessionOnchain({
         agentAddress,
@@ -77,6 +105,10 @@ export function PassportEditor(props: {
   };
 
   const handleRevoke = async () => {
+    if (!ensureAgentInput()) {
+      return;
+    }
+
     try {
       const result = await revokePassportOnchain({
         agentAddress,
@@ -95,6 +127,23 @@ export function PassportEditor(props: {
   return (
     <div className="panel">
       <h2>Agent Passport + Delegation</h2>
+      <div className="status">
+        Owner wallet signs passport/session writes. Agent keys stay with the customer and are never shared.
+      </div>
+      <div className="status">
+        Paste agent/session addresses printed by <code>apps/customer-agent</code>. Use test key generation only for local debugging.
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <button
+          onClick={() => {
+            setAgentAddress(Wallet.createRandom().address);
+            setSessionAddress(Wallet.createRandom().address);
+            setStatus("Generated temporary local test keys. Replace with customer agent/session for real-customer flow.");
+          }}
+        >
+          Generate Test Keys (Local Only)
+        </button>
+      </div>
       <div className="form-grid">
         <div>
           <label>Connected Owner</label>

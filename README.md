@@ -17,6 +17,8 @@ A full reference implementation of safe autonomous agent commerce on Kite:
 - `apps/web` - Next.js dashboard for passport policy, revocation, and timeline
 - `apps/gateway` - Fastify enforcement API and policy middleware integration
 - `apps/runner` - Autonomous agent runner script
+- `apps/customer-agent` - Standalone external customer agent (owns its own keys)
+- `apps/weather-fallback-provider` - Deterministic payable weather API for localhost fallback demos
 - `packages/contracts` - Solidity contracts + Hardhat tests/deploy
 - `packages/provider-kit` - Reusable Node middleware and route config toolkit
 - `packages/shared-types` - Common TypeScript interfaces/constants
@@ -37,8 +39,10 @@ See:
 - `docs/setup-and-runbook.md`
 - `docs/architecture.md`
 - `docs/demo-script.md`
+- `docs/real-customer-e2e.md`
 - `docs/productization-roadmap.md`
 - `docs/frontend-prd.md`
+- `docs/realistic-agent-mission-runbook.md`
 
 ## Status
 This repository contains full scaffolding and implementation code for the balanced MVP+DX build plan, including contract tests and middleware tests. Deploy/testnet credentials and dependency installation are required to run end-to-end.

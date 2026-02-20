@@ -16,6 +16,7 @@ import {
   createContractClients,
 } from "./contracts.js";
 import { KitePaymentService } from "./payment.js";
+import { proxyWeatherRequest } from "./upstream/weatherProxy.js";
 import {
   InMemoryRateLimiter,
   PrismaBudgetService,
@@ -48,6 +49,8 @@ const receiptWriter = new PrismaReceiptWriter(new OnchainReceiptWriter(clients.r
 const routePolicies = getRoutePolicies(config.ROUTE_POLICY_PROFILE, {
   enrichWalletPriceAtomic: config.TEST_PRICE_ENRICH_ATOMIC,
   premiumIntelPriceAtomic: config.TEST_PRICE_PREMIUM_ATOMIC,
+  kiteWeatherProxyPriceAtomic: config.TEST_PRICE_WEATHER_KITE_ATOMIC,
+  weatherFallbackProxyPriceAtomic: config.TEST_PRICE_WEATHER_FALLBACK_ATOMIC,
 });
 
 const enforcer = createRouteEnforcer({
@@ -136,6 +139,86 @@ app.post(
   }
 );
 
+app.post(
+  "/api/weather-kite",
+  { config: { routeId: "api.kite-weather-proxy" }, preHandler: [enforcer] },
+  async (request, reply) => {
+    const body = (request.body ?? {}) as { location?: string };
+    const location = String(body.location ?? "").trim();
+
+    if (!location) {
+      reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "location is required",
+        gatewayActionId: request.enforcementContext?.actionId,
+      });
+      return;
+    }
+
+    try {
+      const upstream = await proxyWeatherRequest({
+        upstreamUrl: config.WEATHER_UPSTREAM_URL,
+        location,
+        requestHeaders: request.headers as Record<string, unknown>,
+        gatewayActionId: request.enforcementContext?.actionId,
+        timeoutMs: config.WEATHER_PROXY_TIMEOUT_MS,
+      });
+
+      for (const [key, value] of Object.entries(upstream.responseHeaders)) {
+        reply.header(key, value);
+      }
+
+      reply.status(upstream.statusCode).send(upstream.payload);
+    } catch (error) {
+      reply.status(502).send({
+        code: "UPSTREAM_UNAVAILABLE",
+        message: (error as Error).message,
+        gatewayActionId: request.enforcementContext?.actionId,
+      });
+    }
+  }
+);
+
+app.post(
+  "/api/weather-fallback",
+  { config: { routeId: "api.weather-fallback-proxy" }, preHandler: [enforcer] },
+  async (request, reply) => {
+    const body = (request.body ?? {}) as { location?: string };
+    const location = String(body.location ?? "").trim();
+
+    if (!location) {
+      reply.status(400).send({
+        code: "INVALID_REQUEST",
+        message: "location is required",
+        gatewayActionId: request.enforcementContext?.actionId,
+      });
+      return;
+    }
+
+    try {
+      const upstream = await proxyWeatherRequest({
+        upstreamUrl: `${config.WEATHER_FALLBACK_BASE_URL.replace(/\/$/, "")}/api/weather`,
+        location,
+        requestHeaders: request.headers as Record<string, unknown>,
+        gatewayActionId: request.enforcementContext?.actionId,
+        timeoutMs: config.WEATHER_PROXY_TIMEOUT_MS,
+      });
+
+      for (const [key, value] of Object.entries(upstream.responseHeaders)) {
+        reply.header(key, value);
+      }
+
+      reply.status(upstream.statusCode).send(upstream.payload);
+    } catch (error) {
+      reply.status(502).send({
+        code: "UPSTREAM_UNAVAILABLE",
+        message: (error as Error).message,
+        gatewayActionId: request.enforcementContext?.actionId,
+      });
+    }
+  }
+);
+
 registerOperationalRoutes(app, { prismaClient: prisma, passportClient });
 
 const start = async () => {
@@ -148,6 +231,8 @@ const start = async () => {
     routePolicyProfile: config.ROUTE_POLICY_PROFILE,
     enrichPriceAtomic: routePolicies["api.enrich-wallet"]?.priceAtomic,
     premiumPriceAtomic: routePolicies["api.premium-intel"]?.priceAtomic,
+    kiteWeatherProxyPriceAtomic: routePolicies["api.kite-weather-proxy"]?.priceAtomic,
+    weatherFallbackProxyPriceAtomic: routePolicies["api.weather-fallback-proxy"]?.priceAtomic,
   }, "Gateway running");
 };
 

@@ -16,9 +16,9 @@ export default function HomePage() {
       <div className="topbar">
         <div>
           <h1 style={{ margin: 0 }}>Agent Passport + Policy Vault + x402 Gateway</h1>
-          <div className="meta">Kite testnet implementation dashboard</div>
+          <div className="meta">Kite testnet dashboard for owner onboarding + external customer agents</div>
         </div>
-        <span className="badge">Balanced MVP + DX</span>
+        <span className="badge">Owner Signs, Agent Keeps Keys</span>
       </div>
 
       <div className="grid">

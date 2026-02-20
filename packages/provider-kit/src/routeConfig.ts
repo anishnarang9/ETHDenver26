@@ -5,6 +5,8 @@ export type RoutePolicyProfile = "demo" | "test";
 export interface RoutePolicyOverrides {
   enrichWalletPriceAtomic?: string;
   premiumIntelPriceAtomic?: string;
+  kiteWeatherProxyPriceAtomic?: string;
+  weatherFallbackProxyPriceAtomic?: string;
 }
 
 const assertAtomic = (value: string, label: string): string => {
@@ -26,10 +28,14 @@ export const getRoutePolicies = (
       ? {
           enrichWalletPriceAtomic: "1000",
           premiumIntelPriceAtomic: "5000",
+          kiteWeatherProxyPriceAtomic: "2000",
+          weatherFallbackProxyPriceAtomic: "2000",
         }
       : {
           enrichWalletPriceAtomic: "1000000",
           premiumIntelPriceAtomic: "5000000",
+          kiteWeatherProxyPriceAtomic: "2000000",
+          weatherFallbackProxyPriceAtomic: "2000000",
         };
 
   const prices = {
@@ -40,6 +46,14 @@ export const getRoutePolicies = (
     premiumIntelPriceAtomic: assertAtomic(
       overrides.premiumIntelPriceAtomic ?? defaults.premiumIntelPriceAtomic,
       "premiumIntelPriceAtomic"
+    ),
+    kiteWeatherProxyPriceAtomic: assertAtomic(
+      overrides.kiteWeatherProxyPriceAtomic ?? defaults.kiteWeatherProxyPriceAtomic,
+      "kiteWeatherProxyPriceAtomic"
+    ),
+    weatherFallbackProxyPriceAtomic: assertAtomic(
+      overrides.weatherFallbackProxyPriceAtomic ?? defaults.weatherFallbackProxyPriceAtomic,
+      "weatherFallbackProxyPriceAtomic"
     ),
   };
 
@@ -59,6 +73,24 @@ export const getRoutePolicies = (
       priceAtomic: prices.premiumIntelPriceAtomic,
       rateLimitPerMin: 5,
       requirePayment: true,
+    },
+    "api.kite-weather-proxy": {
+      routeId: "api.kite-weather-proxy",
+      scope: "weather.kite.read",
+      service: "external.kite.weather",
+      // Pass-through billing mode: policy checks are enforced in gateway but payment is upstream.
+      priceAtomic: prices.kiteWeatherProxyPriceAtomic,
+      rateLimitPerMin: 10,
+      requirePayment: false,
+    },
+    "api.weather-fallback-proxy": {
+      routeId: "api.weather-fallback-proxy",
+      scope: "weather.fallback.read",
+      service: "external.fallback.weather",
+      // Pass-through billing mode: policy checks are enforced in gateway but payment is upstream.
+      priceAtomic: prices.weatherFallbackProxyPriceAtomic,
+      rateLimitPerMin: 10,
+      requirePayment: false,
     },
   };
 };
