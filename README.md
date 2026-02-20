@@ -37,6 +37,8 @@ See:
 - `docs/setup-and-runbook.md`
 - `docs/architecture.md`
 - `docs/demo-script.md`
+- `docs/productization-roadmap.md`
+- `docs/frontend-prd.md`
 
 ## Status
 This repository contains full scaffolding and implementation code for the balanced MVP+DX build plan, including contract tests and middleware tests. Deploy/testnet credentials and dependency installation are required to run end-to-end.

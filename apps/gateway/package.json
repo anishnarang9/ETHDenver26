@@ -6,11 +6,11 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx src/server.ts",
-    "dev:facilitator-mock": "tsx scripts/mock-facilitator.ts",
+    "dev:facilitator-mock": "node --import tsx scripts/mock-facilitator.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:spend-check": "tsx scripts/check-spend.ts"
+    "test:spend-check": "node --import tsx scripts/check-spend.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",
