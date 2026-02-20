@@ -77,12 +77,12 @@ flowchart TB
 
 ## Agent Team
 
-| Agent | LLM | Role | x402 Price | Wallet |
-|-------|-----|------|-----------|--------|
-| Planner | GPT-5.2 | Orchestrator + Itinerary | N/A (client) | Funded by human (10 tokens) |
-| Rider | GPT-5.2-mini | Transportation research | 0.50/search | Earns from Planner |
-| Foodie | GPT-5.2-mini | Restaurant research | 1.0/search | Earns from Planner |
-| EventBot | GPT-5.2 | Event discovery + registration | 0.50/search, 1.0/register | Earns from Planner |
+| Agent    | LLM          | Role                           | x402 Price                | Wallet                      |
+| -------- | ------------ | ------------------------------ | ------------------------- | --------------------------- |
+| Planner  | GPT-5.2      | Orchestrator + Itinerary       | N/A (client)              | Funded by human (10 tokens) |
+| Rider    | GPT-5.2-mini | Transportation research        | 0.50/search               | Earns from Planner          |
+| Foodie   | GPT-5.2-mini | Restaurant research            | 1.0/search                | Earns from Planner          |
+| EventBot | GPT-5.2      | Event discovery + registration | 0.50/search, 1.0/register | Earns from Planner          |
 
 ### What Each Agent Does
 
@@ -113,6 +113,7 @@ Both patterns produce real on-chain transactions verifiable on testnet.kitescan.
 ### Pre-Demo State
 
 Dashboard at `tripdesk-eth.vercel.app` is loaded showing:
+
 - 3 browser panels: all "Standby" with agent avatars
 - Email thread: empty
 - Mission Control: 4 wallets -- Planner: 10.00, Rider/Foodie/EventBot: 0.00
@@ -127,11 +128,11 @@ Setup wizard already ran (passports deployed, sessions created, inboxes created)
 
 **Presenter action**: Opens Gmail, sends a real email:
 
-> **To**: planner@tripdesk.agentmail.to
-> **Subject**: ETHDenver Trip
+> **To**: planner@tripdesk.agentmail.to > **Subject**: ETHDenver Trip
 > **Body**: "I'm flying into Denver on Feb 19 for ETHDenver. Into AI agents and blockchain payments. Plan my trip -- need rides from the airport, good restaurants, and sign me up for cool AI/crypto events on Luma. Name: Rachit, email: rachit@example.com"
 
 **Dashboard shows**:
+
 1. Email panel pulses: "Incoming email from human..."
 2. Email body appears
 3. "Planner thinking..." indicator with brain icon
@@ -148,6 +149,7 @@ Setup wizard already ran (passports deployed, sessions created, inboxes created)
 ### ACT 2: Kite Ecosystem -- Weather via Pieverse (0:30 - 1:15)
 
 **Automatic**:
+
 1. Planner calls `get_weather("Denver")`
 2. Email thread: "Planner -> Kite Weather API"
 3. Transaction feed animates the x402 flow step by step:
@@ -174,20 +176,21 @@ Setup wizard already ran (passports deployed, sessions created, inboxes created)
 
 For each specialist, the enforcement pipeline animates all 10 steps:
 
-| Step | Name | Result |
-|------|------|--------|
-| 1 | Identity Verified | GREEN |
-| 2 | Nonce OK | GREEN |
-| 3 | Session Verified | GREEN |
-| 4 | Passport Verified | GREEN |
-| 5 | Scope Verified (transport/food/events) | GREEN |
-| 6 | Service Verified | GREEN |
-| 7 | Rate Limit OK | GREEN |
-| 8 | Budget Verified | GREEN |
-| 9 | Quote Issued (0.50/1.0 tokens) | GREEN |
-| 10 | Payment Verified (direct ERC20 transfer) | GREEN |
+| Step | Name                                     | Result |
+| ---- | ---------------------------------------- | ------ |
+| 1    | Identity Verified                        | GREEN  |
+| 2    | Nonce OK                                 | GREEN  |
+| 3    | Session Verified                         | GREEN  |
+| 4    | Passport Verified                        | GREEN  |
+| 5    | Scope Verified (transport/food/events)   | GREEN  |
+| 6    | Service Verified                         | GREEN  |
+| 7    | Rate Limit OK                            | GREEN  |
+| 8    | Budget Verified                          | GREEN  |
+| 9    | Quote Issued (0.50/1.0 tokens)           | GREEN  |
+| 10   | Payment Verified (direct ERC20 transfer) | GREEN  |
 
 Transaction cards appear:
+
 - `#1 Planner -> Rider | 0.50 | Direct | [Kitescan]` -- wallet: 9.00 -> 8.50
 - `#2 Planner -> Foodie | 1.0 | Direct | [Kitescan]` -- wallet: 8.50 -> 7.50
 - `#3 Planner -> EventBot | 0.50 | Direct | [Kitescan]` -- wallet: 7.50 -> 7.00
@@ -195,6 +198,7 @@ Transaction cards appear:
 #### Step 3b: Browsers Launch (simultaneously)
 
 **Left panel -- Rider**:
+
 - Browser fades in from standby
 - Thought bubble: "Searching Google Maps for DEN Airport to Convention Center..."
 - Live browser: Google Maps loading, route appearing, travel time displayed
@@ -202,12 +206,14 @@ Transaction cards appear:
 - Browser navigates to ride estimation site, extracts price quotes
 
 **Center panel -- Foodie**:
+
 - Browser fades in
 - Thought bubble: "Weather is 45F cloudy. Searching Yelp for indoor restaurants near Convention Center..."
 - Live browser: Yelp loading, search results appearing, agent clicking top-rated options
 - LLM reasons: "Guard & Grace: 4.5 stars, steak, 0.3 mi away. Adding to list."
 
 **Right panel -- EventBot**:
+
 - Browser fades in
 - Thought bubble: "Searching Luma for AI and blockchain events in Denver, Feb 19-21..."
 - Live browser: lu.ma loading, search results, scrolling through events
@@ -218,6 +224,7 @@ ALL THREE MOVING SIMULTANEOUSLY.
 #### Step 3c: Results Return
 
 Agents email results back to Planner via AgentMail:
+
 - "Rider -> Planner: 3 ride options. Recommended: Uber XL ~$22, 30 min."
 - "Foodie -> Planner: Top 3 restaurants. #1 Guard & Grace (steak, 4.5 stars, 0.3 mi)"
 - "EventBot -> Planner: Found 4 Luma events. Top pick: 'AI Agents Happy Hour' Feb 20"
@@ -231,6 +238,7 @@ Specialist wallet balances tick up (Rider: 0 -> 0.50, Foodie: 0 -> 1.0, EventBot
 ### ACT 4: Luma Registration -- Tangible Proof (3:30 - 4:30)
 
 **Automatic**:
+
 1. Planner decides to register for top 2 events
 2. New x402 payment: `#4 Planner -> EventBot | 1.0 | Direct` (registration costs more). Wallet: 7.00 -> 6.00
 3. Enforcement pipeline: all 10 steps green
@@ -257,6 +265,7 @@ Specialist wallet balances tick up (Rider: 0 -> 0.50, Foodie: 0 -> 1.0, EventBot
 ### ACT 5: Itinerary Delivery (4:30 - 5:00)
 
 **Automatic**:
+
 1. Planner compiles results. Thought bubble streams reasoning
 2. Planner sends itinerary email to human via AgentMail
 3. Email thread shows the full itinerary:
@@ -305,6 +314,7 @@ COST BREAKDOWN:
 **Presenter action**: Clicks "Run Additional Search" button on dashboard.
 
 **Dashboard shows**:
+
 1. "Planner attempting to hire Rider for additional search..."
 2. Enforcement pipeline animates:
    - Steps 1-7: all GREEN (identity, nonce, session, passport, scope, service, rate limit)
@@ -323,6 +333,7 @@ COST BREAKDOWN:
 **Presenter action**: Clicks "Trigger Scope Violation" button, which sends a follow-up email: "Also find me ETHDenver merch shops."
 
 **Dashboard shows**:
+
 1. Email arrives: "Human -> Planner: Find ETHDenver merch shops"
 2. Planner reasons: "User wants shopping. Let me try to search for shops..."
 3. Planner attempts to call with scope `shopping`
@@ -339,6 +350,7 @@ COST BREAKDOWN:
 **Presenter action**: Clicks the red "REVOKE EVENTBOT" button in Mission Control.
 
 **Dashboard shows**:
+
 1. On-chain transaction fires: `PassportRegistry.revokePassport(eventBotAddress)`
 2. Confirmation: "EventBot passport revoked. Tx: 0x..."
 3. EventBot's browser panel shows RED "REVOKED" overlay
@@ -366,17 +378,17 @@ COST BREAKDOWN:
 
 ## What Judges Will Verify
 
-| Check | Evidence | Location |
-|-------|----------|----------|
-| x402 payments real? | ERC20 transfers on Kite testnet | testnet.kitescan.ai tx hashes |
-| Pieverse integration real? | /v2/settle call to facilitator.pieverse.io | Network logs, tx receipt |
-| Agents have own wallets? | 4 separate addresses with visible balances | Kitescan address pages |
-| LLMs actually deciding? | Function calling with visible reasoning | SSE llm_decision events, thought bubbles |
-| Enforcement real? | 10-step middleware, same code all 3 specialists | provider-kit/src/enforcement.ts |
-| Emails real? | AgentMail inboxes, SMTP delivery | Check Gmail inbox |
-| Luma signup real? | Check event attendee list | lu.ma event page |
-| Contracts real? | PassportRegistry, SessionRegistry, ReceiptLog | Kitescan contract pages |
-| Publicly deployed? | Real URLs on Railway + Vercel | tripdesk-eth.vercel.app |
+| Check                      | Evidence                                        | Location                                 |
+| -------------------------- | ----------------------------------------------- | ---------------------------------------- |
+| x402 payments real?        | ERC20 transfers on Kite testnet                 | testnet.kitescan.ai tx hashes            |
+| Pieverse integration real? | /v2/settle call to facilitator.pieverse.io      | Network logs, tx receipt                 |
+| Agents have own wallets?   | 4 separate addresses with visible balances      | Kitescan address pages                   |
+| LLMs actually deciding?    | Function calling with visible reasoning         | SSE llm_decision events, thought bubbles |
+| Enforcement real?          | 10-step middleware, same code all 3 specialists | provider-kit/src/enforcement.ts          |
+| Emails real?               | AgentMail inboxes, SMTP delivery                | Check Gmail inbox                        |
+| Luma signup real?          | Check event attendee list                       | lu.ma event page                         |
+| Contracts real?            | PassportRegistry, SessionRegistry, ReceiptLog   | Kitescan contract pages                  |
+| Publicly deployed?         | Real URLs on Railway + Vercel                   | tripdesk-eth.vercel.app                  |
 
 ---
 
@@ -384,20 +396,20 @@ COST BREAKDOWN:
 
 ### Event Types
 
-| Event | Emitted By | Dashboard Effect |
-|-------|-----------|-----------------|
-| `email_received` | Planner | New message in thread |
-| `email_sent` | Any | New message in thread |
-| `llm_thinking` | Any | Thought bubble streams text |
-| `llm_tool_call` | Any | Tool call indicator |
-| `browser_session` | Specialist | iframe loads liveViewUrl |
-| `browser_screenshot` | Specialist | Screenshot saved for replay |
-| `enforcement_step` | Specialist | Pipeline step green/red |
-| `payment_start` | Planner | Transaction card: pending |
-| `payment_complete` | Planner | Transaction card: confirmed + Kitescan link |
-| `payment_failed` | Planner | Transaction card: red X |
-| `wallet_update` | Any | Counter animates |
-| `agent_status` | Any | Active/idle/blocked/revoked |
+| Event                | Emitted By | Dashboard Effect                            |
+| -------------------- | ---------- | ------------------------------------------- |
+| `email_received`     | Planner    | New message in thread                       |
+| `email_sent`         | Any        | New message in thread                       |
+| `llm_thinking`       | Any        | Thought bubble streams text                 |
+| `llm_tool_call`      | Any        | Tool call indicator                         |
+| `browser_session`    | Specialist | iframe loads liveViewUrl                    |
+| `browser_screenshot` | Specialist | Screenshot saved for replay                 |
+| `enforcement_step`   | Specialist | Pipeline step green/red                     |
+| `payment_start`      | Planner    | Transaction card: pending                   |
+| `payment_complete`   | Planner    | Transaction card: confirmed + Kitescan link |
+| `payment_failed`     | Planner    | Transaction card: red X                     |
+| `wallet_update`      | Any        | Counter animates                            |
+| `agent_status`       | Any        | Active/idle/blocked/revoked                 |
 
 ### Replay Log (Prisma)
 
@@ -420,34 +432,34 @@ Replay: `GET /api/replay/:runId` streams events with setTimeout delays matching 
 
 ## Dashboard Components
 
-| Component | Tech | Purpose |
-|-----------|------|---------|
-| `AgentBrowserPanel` | iframe + status + thought | Live browser + LLM reasoning |
-| `EmailThreadPanel` | Scrollable message list | Agent-to-agent email flow |
-| `EnforcementPipeline` | framer-motion 10-step bar | Green pass / red block animation |
-| `WalletBalances` | Live ERC20 polling + counters | Balance changes animate |
-| `TransactionFeed` | Card list + Kitescan links | Pieverse/Direct badges |
-| `MissionControl` | Wallets + txns + action buttons | Control center |
-| `ThoughtBubble` | Streaming text | LLM reasoning display |
-| `ReplayButton` | SSE reconnect to replay endpoint | Replay last run |
-| `ConsoleLayout` | CSS grid layout | Full page grid |
-| `useSSE` hook | EventSource + dispatch | Event connection |
+| Component             | Tech                             | Purpose                          |
+| --------------------- | -------------------------------- | -------------------------------- |
+| `AgentBrowserPanel`   | iframe + status + thought        | Live browser + LLM reasoning     |
+| `EmailThreadPanel`    | Scrollable message list          | Agent-to-agent email flow        |
+| `EnforcementPipeline` | framer-motion 10-step bar        | Green pass / red block animation |
+| `WalletBalances`      | Live ERC20 polling + counters    | Balance changes animate          |
+| `TransactionFeed`     | Card list + Kitescan links       | Pieverse/Direct badges           |
+| `MissionControl`      | Wallets + txns + action buttons  | Control center                   |
+| `ThoughtBubble`       | Streaming text                   | LLM reasoning display            |
+| `ReplayButton`        | SSE reconnect to replay endpoint | Replay last run                  |
+| `ConsoleLayout`       | CSS grid layout                  | Full page grid                   |
+| `useSSE` hook         | EventSource + dispatch           | Event connection                 |
 
 ---
 
 ## Existing Code Reuse
 
-| Code | File | Reused By |
-|------|------|-----------|
-| `callPricedRoute()` | apps/runner/src/flow.ts | Planner calls specialist x402 APIs |
-| `payDirectTransfer()` | apps/runner/src/payment.ts | Agent-to-agent payments |
-| `payViaFacilitator()` | apps/runner/src/payment.ts | Adapt for Pieverse v2 |
-| `signEnvelope()` | apps/runner/src/signing.ts | Sign x402 requests |
-| `createRouteEnforcer()` | packages/provider-kit/src/enforcement.ts | All 3 specialist agents |
-| `PassportRegistry.sol` | packages/contracts/contracts/ | Passports for 4 agents |
-| `SessionRegistry.sol` | packages/contracts/contracts/ | Session keys per agent |
-| `ReceiptLog.sol` | packages/contracts/contracts/ | On-chain receipts |
-| Prisma schema | packages/db/prisma/schema.prisma | Extend with RunEvent |
+| Code                    | File                                     | Reused By                          |
+| ----------------------- | ---------------------------------------- | ---------------------------------- |
+| `callPricedRoute()`     | apps/runner/src/flow.ts                  | Planner calls specialist x402 APIs |
+| `payDirectTransfer()`   | apps/runner/src/payment.ts               | Agent-to-agent payments            |
+| `payViaFacilitator()`   | apps/runner/src/payment.ts               | Adapt for Pieverse v2              |
+| `signEnvelope()`        | apps/runner/src/signing.ts               | Sign x402 requests                 |
+| `createRouteEnforcer()` | packages/provider-kit/src/enforcement.ts | All 3 specialist agents            |
+| `PassportRegistry.sol`  | packages/contracts/contracts/            | Passports for 4 agents             |
+| `SessionRegistry.sol`   | packages/contracts/contracts/            | Session keys per agent             |
+| `ReceiptLog.sol`        | packages/contracts/contracts/            | On-chain receipts                  |
+| Prisma schema           | packages/db/prisma/schema.prisma         | Extend with RunEvent               |
 
 ---
 
@@ -464,14 +476,14 @@ Replay: `GET /api/replay/:runId` streams events with setTimeout delays matching 
 
 ## Deployment
 
-| Component | Platform | URL |
-|-----------|----------|-----|
-| Dashboard | Vercel | tripdesk-eth.vercel.app |
-| Planner | Railway | planner.up.railway.app |
-| Rider | Railway | rider.up.railway.app |
-| Foodie | Railway | foodie.up.railway.app |
-| EventBot | Railway | eventbot.up.railway.app |
-| PostgreSQL | Railway addon | internal |
+| Component  | Platform      | URL                     |
+| ---------- | ------------- | ----------------------- |
+| Dashboard  | Vercel        | tripdesk-eth.vercel.app |
+| Planner    | Railway       | planner.up.railway.app  |
+| Rider      | Railway       | rider.up.railway.app    |
+| Foodie     | Railway       | foodie.up.railway.app   |
+| EventBot   | Railway       | eventbot.up.railway.app |
+| PostgreSQL | Railway addon | internal                |
 
 Fastify services listen on `::` for Railway compatibility.
 
@@ -479,36 +491,36 @@ Fastify services listen on `::` for Railway compatibility.
 
 ## Scoring: 93/100
 
-| Criterion | Score | Max | Notes |
-|-----------|-------|-----|-------|
-| Agent Autonomy | 20 | 20 | 4 agents, own LLMs, real decisions |
-| x402 Usage | 19 | 20 | Pieverse + direct, real on-chain, official token |
-| Security/Safety | 18 | 20 | 10-step enforcement, 3 failure demos |
-| Developer Experience | 9 | 10 | provider-kit reusable, .env.example |
-| Real-world Applicability | 10 | 10 | Universal use case, Kite marketplace alignment |
-| Visual/Demo Impact | 17 | 20 | 3 browsers, thought bubbles, replay |
+| Criterion                | Score | Max | Notes                                            |
+| ------------------------ | ----- | --- | ------------------------------------------------ |
+| Agent Autonomy           | 20    | 20  | 4 agents, own LLMs, real decisions               |
+| x402 Usage               | 19    | 20  | Pieverse + direct, real on-chain, official token |
+| Security/Safety          | 18    | 20  | 10-step enforcement, 3 failure demos             |
+| Developer Experience     | 9     | 10  | provider-kit reusable, .env.example              |
+| Real-world Applicability | 10    | 10  | Universal use case, Kite marketplace alignment   |
+| Visual/Demo Impact       | 17    | 20  | 3 browsers, thought bubbles, replay              |
 
 ---
 
 ## Build Order
 
-| # | Task | Hours | Priority |
-|---|------|-------|----------|
-| 1 | LLM agent framework (OpenAI + Firecrawl base class) | 3 | P0 |
-| 2 | Rider agent (Fastify + provider-kit + LLM + Firecrawl) | 3 | P0 |
-| 3 | Foodie agent (same pattern) | 2 | P0 |
-| 4 | EventBot agent (LLM + Luma search + form filling) | 4 | P0 |
-| 5 | Planner orchestrator (GPT-5.2 tools + AgentMail + callPricedRoute) | 4 | P0 |
-| 6 | Pieverse integration (payViaPieverse for Weather API) | 2 | P0 |
-| 7 | Dashboard (Tailwind + shadcn + all panels) | 5 | P0 |
-| 8 | SSE streaming (all agents -> dashboard) | 2 | P0 |
-| 9 | SSE replay (RunEvent model + replay endpoint + button) | 2 | P1 |
-| 10 | AgentMail (4 inboxes + webhooks + thread UI) | 2 | P1 |
-| 11 | Wallet animations + Kitescan links | 1.5 | P1 |
-| 12 | Failure demos (3 scenarios + buttons) | 2 | P1 |
-| 13 | Luma registration testing | 2 | P1 |
-| 14 | Landing page + setup wizard | 2 | P2 |
-| 15 | Railway + Vercel deployment | 2 | P2 |
-| 16 | .env.example + README + demo video | 2 | P2 |
+| #   | Task                                                               | Hours | Priority |
+| --- | ------------------------------------------------------------------ | ----- | -------- |
+| 1   | LLM agent framework (OpenAI + Firecrawl base class)                | 3     | P0       |
+| 2   | Rider agent (Fastify + provider-kit + LLM + Firecrawl)             | 3     | P0       |
+| 3   | Foodie agent (same pattern)                                        | 2     | P0       |
+| 4   | EventBot agent (LLM + Luma search + form filling)                  | 4     | P0       |
+| 5   | Planner orchestrator (GPT-5.2 tools + AgentMail + callPricedRoute) | 4     | P0       |
+| 6   | Pieverse integration (payViaPieverse for Weather API)              | 2     | P0       |
+| 7   | Dashboard (Tailwind + shadcn + all panels)                         | 5     | P0       |
+| 8   | SSE streaming (all agents -> dashboard)                            | 2     | P0       |
+| 9   | SSE replay (RunEvent model + replay endpoint + button)             | 2     | P1       |
+| 10  | AgentMail (4 inboxes + webhooks + thread UI)                       | 2     | P1       |
+| 11  | Wallet animations + Kitescan links                                 | 1.5   | P1       |
+| 12  | Failure demos (3 scenarios + buttons)                              | 2     | P1       |
+| 13  | Luma registration testing                                          | 2     | P1       |
+| 14  | Landing page + setup wizard                                        | 2     | P2       |
+| 15  | Railway + Vercel deployment                                        | 2     | P2       |
+| 16  | .env.example + README + demo video                                 | 2     | P2       |
 
 **P0: ~25h** | **Full: ~38.5h**
