@@ -68,7 +68,34 @@ describe("ReceiptLog", function () {
     await expect(
       receiptLog
         .connect(gateway)
-        .recordReceipt(ethers.id("action-4"), agent.address, payer.address, ethers.ZeroAddress, 0n, ethers.id("route"), ethers.id("settle"), ethers.id("meta"))
-    ).to.be.reverted;
+        .recordReceipt(ethers.id("action-4"), ethers.ZeroAddress, payer.address, agent.address, 100n, ethers.id("route"), ethers.id("settle"), ethers.id("meta"))
+    ).to.be.revertedWith("invalid agent");
+
+    await expect(
+      receiptLog
+        .connect(gateway)
+        .recordReceipt(ethers.id("action-5"), agent.address, ethers.ZeroAddress, agent.address, 100n, ethers.id("route"), ethers.id("settle"), ethers.id("meta"))
+    ).to.be.revertedWith("invalid payer");
+
+    await expect(
+      receiptLog
+        .connect(gateway)
+        .recordReceipt(ethers.id("action-6"), agent.address, payer.address, ethers.ZeroAddress, 100n, ethers.id("route"), ethers.id("settle"), ethers.id("meta"))
+    ).to.be.revertedWith("invalid asset");
+
+    await expect(
+      receiptLog
+        .connect(gateway)
+        .recordReceipt(ethers.id("action-7"), agent.address, payer.address, agent.address, 0n, ethers.id("route"), ethers.id("settle"), ethers.id("meta"))
+    ).to.be.revertedWith("invalid amount");
+  });
+
+  it("reverts when reading unknown receipt id", async function () {
+    const [admin, gateway] = await ethers.getSigners();
+    const factory = await ethers.getContractFactory("ReceiptLog");
+    const receiptLog = (await factory.deploy(admin.address, gateway.address)) as any;
+    await receiptLog.waitForDeployment();
+
+    await expect(receiptLog.getReceipt(ethers.id("missing-action"))).to.be.revertedWith("receipt missing");
   });
 });

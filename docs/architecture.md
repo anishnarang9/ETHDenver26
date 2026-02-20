@@ -20,13 +20,16 @@
   - `POST /api/premium-intel`
 - Operational routes:
   - `GET /api/passport/:agent`
-  - `POST /api/passport/upsert`
-  - `POST /api/passport/revoke`
-  - `POST /api/session/grant`
   - `GET /api/actions/:actionId`
   - `GET /api/timeline/:agent`
   - `GET /api/timeline/:agent/stream`
 - Uses provider-kit middleware to enforce policy in strict order.
+- Supports runtime route pricing profiles:
+  - `demo`: showcase prices
+  - `test`: low-cost prices for repeated test rounds
+- Includes KITE-only spend guard script for gateway signer operations.
+
+Passport/session/revoke writes are executed directly from the web app via wallet signatures to on-chain contracts.
 
 ### 3. Provider Kit (`packages/provider-kit`)
 - Reusable middleware and route policy config.
@@ -49,6 +52,7 @@
   - Pay via facilitator.
   - Fallback to direct ERC20 transfer.
   - Retry with proof.
+- Adds deterministic controls for route subset selection and loop iterations.
 
 ### 6. Persistence (`packages/db`)
 - Prisma/Postgres schema for timeline, actions, quotes, settlements, receipts, and nonce replay prevention.

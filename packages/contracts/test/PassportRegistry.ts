@@ -78,4 +78,43 @@ describe("PassportRegistry", function () {
     expect(await registry.isServiceAllowed(agentSigner.address, serviceA)).to.equal(false);
     expect(await registry.isServiceAllowed(agentSigner.address, serviceB)).to.equal(true);
   });
+
+  it("rejects zero agent and expired passport upserts", async function () {
+    const [owner, , agentSigner] = await ethers.getSigners();
+    const factory = await ethers.getContractFactory("PassportRegistry");
+    const registry = (await factory.deploy(owner.address)) as any;
+    await registry.waitForDeployment();
+
+    const now = (await ethers.provider.getBlock("latest"))!.timestamp;
+    const scope = ethers.id("enrich.wallet");
+    const service = ethers.id("internal.enrich");
+
+    await expect(
+      registry.upsertPassport(ethers.ZeroAddress, now + 3600, 1000n, 10000n, 60, [scope], [service])
+    ).to.be.revertedWith("invalid agent");
+
+    await expect(
+      registry.upsertPassport(agentSigner.address, now, 1000n, 10000n, 60, [scope], [service])
+    ).to.be.revertedWith("invalid expiry");
+  });
+
+  it("reports expiration status after time advances", async function () {
+    const [owner, , agentSigner] = await ethers.getSigners();
+    const factory = await ethers.getContractFactory("PassportRegistry");
+    const registry = (await factory.deploy(owner.address)) as any;
+    await registry.waitForDeployment();
+
+    const now = (await ethers.provider.getBlock("latest"))!.timestamp;
+    const scope = ethers.id("enrich.wallet");
+    const service = ethers.id("internal.enrich");
+
+    await registry.upsertPassport(agentSigner.address, now + 5, 1000n, 10000n, 60, [scope], [service]);
+
+    expect(await registry.isExpired(agentSigner.address)).to.equal(false);
+
+    await ethers.provider.send("evm_increaseTime", [6]);
+    await ethers.provider.send("evm_mine", []);
+
+    expect(await registry.isExpired(agentSigner.address)).to.equal(true);
+  });
 });

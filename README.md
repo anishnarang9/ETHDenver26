@@ -8,6 +8,10 @@ A full reference implementation of safe autonomous agent commerce on Kite:
 - Facilitator-first verification with direct-transfer fallback
 - On-chain receipt logging for auditability
 - Live timeline dashboard
+- Browser-wallet-signed passport/session/revoke writes (no owner private key sent to server)
+- Dual pricing profiles (`demo` and low-cost `test`) for repeated validation
+- Deterministic runner controls (route selection, iterations, facilitator toggle)
+- Gateway KITE spend guard and optional local mock facilitator
 
 ## Monorepo Layout
 - `apps/web` - Next.js dashboard for passport policy, revocation, and timeline

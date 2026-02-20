@@ -26,10 +26,22 @@ describe("Prisma schema coverage", () => {
     expect(schema).toContain("actionId         String             @unique");
     expect(schema).toContain("@@unique([sessionAddress, nonce])");
     expect(schema).toContain("txHash           String?  @unique");
+    expect(schema).toContain("@@unique([actionId, paymentRef])");
   });
 
   it("keeps timeline query indexes", () => {
     expect(schema).toContain("@@index([agentAddress, createdAt])");
     expect(schema).toContain("@@index([actionId, createdAt])");
+    expect(schema).toContain("@@index([agentId, createdAt])");
+  });
+
+  it("includes settlement and receipt fields needed for spend and audit reports", () => {
+    expect(schema).toContain("model PaymentSettlement");
+    expect(schema).toContain("payer            String");
+    expect(schema).toContain("amount           Decimal");
+    expect(schema).toContain("verifiedAt       DateTime");
+    expect(schema).toContain("model Receipt");
+    expect(schema).toContain("onchainTxHash    String?");
+    expect(schema).toContain("onchainReceiptId String?");
   });
 });

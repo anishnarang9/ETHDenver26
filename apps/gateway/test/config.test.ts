@@ -26,6 +26,8 @@ describe("gateway config", () => {
     expect(config.GATEWAY_PORT).toBe("4001");
     expect(config.GATEWAY_HOST).toBe("0.0.0.0");
     expect(config.KITE_RPC_URL).toBe(baseEnv.KITE_RPC_URL);
+    expect(config.ROUTE_POLICY_PROFILE).toBe("test");
+    expect(config.MAX_KITE_SPEND_PER_DAY).toBe("0.05");
   });
 
   it("throws when required values are missing", () => {

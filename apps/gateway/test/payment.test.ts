@@ -150,4 +150,76 @@ describe("KitePaymentService", () => {
     expect(result.verified).toBe(false);
     expect(result.reason).toContain("no matching transfer log");
   });
+
+  it("fails direct verification when transfer asset does not match quote asset", async () => {
+    const encoded = transferInterface.encodeEventLog(transferInterface.getEvent("Transfer"), [
+      "0x0000000000000000000000000000000000000011",
+      challenge.payTo,
+      100n,
+    ]);
+
+    const provider = {
+      getTransactionReceipt: vi.fn().mockResolvedValue({
+        status: 1,
+        logs: [
+          {
+            address: "0x00000000000000000000000000000000000000dd",
+            topics: encoded.topics,
+            data: encoded.data,
+          },
+        ],
+      }),
+    };
+
+    const svc = new KitePaymentService("", provider as never);
+
+    const result = await svc.verifyPayment({
+      agentAddress: "0x0000000000000000000000000000000000000011",
+      challenge,
+      proof: {
+        actionId: "a1",
+        protocol: "direct-transfer",
+        txHash: "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      },
+    });
+
+    expect(result.verified).toBe(false);
+    expect(result.reason).toContain("no matching transfer log");
+  });
+
+  it("fails direct verification when transfer value is below quoted amount", async () => {
+    const encoded = transferInterface.encodeEventLog(transferInterface.getEvent("Transfer"), [
+      "0x0000000000000000000000000000000000000011",
+      challenge.payTo,
+      99n,
+    ]);
+
+    const provider = {
+      getTransactionReceipt: vi.fn().mockResolvedValue({
+        status: 1,
+        logs: [
+          {
+            address: challenge.asset,
+            topics: encoded.topics,
+            data: encoded.data,
+          },
+        ],
+      }),
+    };
+
+    const svc = new KitePaymentService("", provider as never);
+
+    const result = await svc.verifyPayment({
+      agentAddress: "0x0000000000000000000000000000000000000011",
+      challenge,
+      proof: {
+        actionId: "a1",
+        protocol: "direct-transfer",
+        txHash: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      },
+    });
+
+    expect(result.verified).toBe(false);
+    expect(result.reason).toContain("no matching transfer log");
+  });
 });

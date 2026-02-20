@@ -23,7 +23,11 @@ export class DefaultSignatureVerifier implements SignatureVerifier {
       return false;
     }
 
-    const recovered = verifyMessage(canonicalMessage(envelope), envelope.signature);
-    return recovered.toLowerCase() === envelope.sessionAddress.toLowerCase();
+    try {
+      const recovered = verifyMessage(canonicalMessage(envelope), envelope.signature);
+      return recovered.toLowerCase() === envelope.sessionAddress.toLowerCase();
+    } catch {
+      return false;
+    }
   }
 }

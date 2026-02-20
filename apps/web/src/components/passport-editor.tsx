@@ -2,7 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { Wallet } from "ethers";
-import { grantSession, revokePassport, upsertPassport } from "../lib/api";
+import {
+  grantSessionOnchain,
+  revokePassportOnchain,
+  upsertPassportOnchain,
+} from "../lib/onchain";
 
 const splitCsv = (value: string) =>
   value
@@ -15,7 +19,6 @@ export function PassportEditor(props: {
   onAgentChanged: (agent: string) => void;
   onAction: (message: string) => void;
 }) {
-  const [ownerPrivateKey, setOwnerPrivateKey] = useState("");
   const [agentAddress, setAgentAddress] = useState(() => Wallet.createRandom().address);
   const [sessionAddress, setSessionAddress] = useState(() => Wallet.createRandom().address);
   const [scopes, setScopes] = useState("enrich.wallet,premium.intel");
@@ -33,8 +36,7 @@ export function PassportEditor(props: {
 
   const handleUpsert = async () => {
     try {
-      const result = await upsertPassport({
-        ownerPrivateKey,
+      const result = await upsertPassportOnchain({
         agentAddress,
         expiresAt,
         perCallCap,
@@ -43,7 +45,11 @@ export function PassportEditor(props: {
         scopes: splitCsv(scopes),
         services: splitCsv(services),
       });
-      setStatus(`Passport updated on-chain: ${result.txHash}`);
+      setStatus(
+        result.explorerLink
+          ? `Passport updated: ${result.txHash} (${result.explorerLink})`
+          : `Passport updated on-chain: ${result.txHash}`
+      );
       props.onAgentChanged(agentAddress);
       props.onAction(`Passport upserted for ${agentAddress}`);
     } catch (error) {
@@ -53,14 +59,17 @@ export function PassportEditor(props: {
 
   const handleSessionGrant = async () => {
     try {
-      const result = await grantSession({
-        ownerPrivateKey,
+      const result = await grantSessionOnchain({
         agentAddress,
         sessionAddress,
         expiresAt,
         scopes: splitCsv(scopes),
       });
-      setStatus(`Session granted: ${result.txHash}`);
+      setStatus(
+        result.explorerLink
+          ? `Session granted: ${result.txHash} (${result.explorerLink})`
+          : `Session granted: ${result.txHash}`
+      );
       props.onAction(`Session granted for ${sessionAddress}`);
     } catch (error) {
       setStatus(`Session grant failed: ${(error as Error).message}`);
@@ -69,11 +78,14 @@ export function PassportEditor(props: {
 
   const handleRevoke = async () => {
     try {
-      const result = await revokePassport({
-        ownerPrivateKey,
+      const result = await revokePassportOnchain({
         agentAddress,
       });
-      setStatus(`Passport revoked: ${result.txHash}`);
+      setStatus(
+        result.explorerLink
+          ? `Passport revoked: ${result.txHash} (${result.explorerLink})`
+          : `Passport revoked: ${result.txHash}`
+      );
       props.onAction(`Passport revoked for ${agentAddress}`);
     } catch (error) {
       setStatus(`Revocation failed: ${(error as Error).message}`);
@@ -84,14 +96,6 @@ export function PassportEditor(props: {
     <div className="panel">
       <h2>Agent Passport + Delegation</h2>
       <div className="form-grid">
-        <div>
-          <label>Owner Private Key (demo relayer mode)</label>
-          <input
-            value={ownerPrivateKey}
-            onChange={(event) => setOwnerPrivateKey(event.target.value)}
-            placeholder="0x..."
-          />
-        </div>
         <div>
           <label>Connected Owner</label>
           <input value={props.ownerAddress || "not connected"} readOnly />
@@ -146,6 +150,7 @@ export function PassportEditor(props: {
           Revoke Passport
         </button>
       </div>
+      <div className="status">All writes are signed in your browser wallet. Private keys are never sent to the server.</div>
       <div className="status">{status}</div>
     </div>
   );

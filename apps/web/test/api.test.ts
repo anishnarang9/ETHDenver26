@@ -3,9 +3,6 @@ import {
   getAction,
   getPassport,
   getTimeline,
-  grantSession,
-  revokePassport,
-  upsertPassport,
 } from "../src/lib/api";
 
 describe("web api client", () => {
@@ -14,30 +11,7 @@ describe("web api client", () => {
     vi.unstubAllGlobals();
   });
 
-  it("upserts passport successfully", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ txHash: "0x123", explorerLink: null }),
-      })
-    );
-
-    const result = await upsertPassport({
-      ownerPrivateKey: "0xowner",
-      agentAddress: "0xagent",
-      expiresAt: 123,
-      perCallCap: "1",
-      dailyCap: "10",
-      rateLimitPerMin: 1,
-      scopes: ["enrich.wallet"],
-      services: ["internal.enrich"],
-    });
-
-    expect(result.txHash).toBe("0x123");
-  });
-
-  it("throws for failed revoke response", async () => {
+  it("throws for failed timeline response", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({
@@ -46,7 +20,7 @@ describe("web api client", () => {
       })
     );
 
-    await expect(revokePassport({ ownerPrivateKey: "x", agentAddress: "y" })).rejects.toThrow("forbidden");
+    await expect(getTimeline("0xabc")).rejects.toThrow("forbidden");
   });
 
   it("loads timeline payload", async () => {
@@ -76,20 +50,14 @@ describe("web api client", () => {
     expect(passport).toMatchObject({ onchain: { agent: "0x1" } });
   });
 
-  it("posts session grant request", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ txHash: "0xsession" }) })
-    );
+  it("throws for failed action and passport responses", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, text: async () => "action missing" })
+      .mockResolvedValueOnce({ ok: false, text: async () => "passport missing" });
+    vi.stubGlobal("fetch", fetchMock);
 
-    const result = await grantSession({
-      ownerPrivateKey: "0xowner",
-      agentAddress: "0xagent",
-      sessionAddress: "0xsession",
-      expiresAt: 123,
-      scopes: ["enrich.wallet"],
-    });
-
-    expect(result.txHash).toBe("0xsession");
+    await expect(getAction("missing")).rejects.toThrow("action missing");
+    await expect(getPassport("0xmissing")).rejects.toThrow("passport missing");
   });
 });

@@ -57,4 +57,21 @@ describe("DefaultSignatureVerifier", () => {
 
     expect(valid).toBe(false);
   });
+
+  it("rejects malformed signatures without throwing", async () => {
+    const body = { hello: "world" };
+    const envelope = {
+      agentAddress: Wallet.createRandom().address as `0x${string}`,
+      sessionAddress: Wallet.createRandom().address as `0x${string}`,
+      timestamp: new Date().toISOString(),
+      nonce: "n-1",
+      bodyHash: keccak256(toUtf8Bytes(JSON.stringify(body))),
+      signature: "not-a-signature",
+    };
+
+    const verifier = new DefaultSignatureVerifier();
+    const valid = await verifier.verify(envelope, buildRequest(body));
+
+    expect(valid).toBe(false);
+  });
 });

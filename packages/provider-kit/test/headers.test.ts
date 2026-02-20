@@ -26,6 +26,18 @@ describe("provider-kit headers", () => {
     expect(envelope?.nonce).toBe("n-1");
   });
 
+  it("returns null when signed envelope headers are incomplete", () => {
+    const envelope = readEnvelope({
+      [HEADER_AGENT]: "0x0000000000000000000000000000000000000001",
+      [HEADER_SESSION]: "0x0000000000000000000000000000000000000002",
+      [HEADER_TIMESTAMP]: "2026-01-01T00:00:00.000Z",
+      [HEADER_NONCE]: "n-1",
+      [HEADER_BODY_HASH]: "0xhash",
+    });
+
+    expect(envelope).toBeNull();
+  });
+
   it("supports payment proof parsing for dual header formats", () => {
     const legacy = readPaymentProof({
       "x-payment": "0xlegacy",
@@ -47,6 +59,14 @@ describe("provider-kit headers", () => {
     expect(v2?.protocol).toBe("payment-signature");
     expect(v2?.txHash).toMatch(/^0x/);
     expect(direct?.protocol).toBe("direct-transfer");
+  });
+
+  it("returns null payment proof when action id is missing", () => {
+    const proof = readPaymentProof({
+      "payment-signature": "0xv2",
+    });
+
+    expect(proof).toBeNull();
   });
 
   it("builds challenge headers for both protocols", () => {

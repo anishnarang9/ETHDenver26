@@ -94,16 +94,24 @@ export const createRouteEnforcer = (options: EnforcementOptions): RouteEnforcer 
       await fail(options, actionId, envelope.agentAddress, routeId, 409, "REPLAY_NONCE", "nonce already used");
     }
 
+    const session = await options.sessionClient.getSession(envelope.sessionAddress);
+    if (!session) {
+      await fail(options, actionId, envelope.agentAddress, routeId, 401, "SESSION_EXPIRED", "session is inactive");
+    }
+    const activeSession = session as NonNullable<typeof session>;
+
+    const nowSec = Math.floor((options.now?.().getTime() ?? Date.now()) / 1000);
+    if (activeSession.revoked) {
+      await fail(options, actionId, envelope.agentAddress, routeId, 401, "SESSION_REVOKED", "session revoked");
+    }
+    if (activeSession.expiresAt <= nowSec) {
+      await fail(options, actionId, envelope.agentAddress, routeId, 401, "SESSION_EXPIRED", "session is inactive");
+    }
+
     const sessionActive = await options.sessionClient.isSessionActive(envelope.sessionAddress);
     if (!sessionActive) {
       await fail(options, actionId, envelope.agentAddress, routeId, 401, "SESSION_EXPIRED", "session is inactive");
     }
-
-    const session = await options.sessionClient.getSession(envelope.sessionAddress);
-    if (!session || session.revoked) {
-      await fail(options, actionId, envelope.agentAddress, routeId, 401, "SESSION_REVOKED", "session revoked");
-    }
-    const activeSession = session as NonNullable<typeof session>;
 
     if (activeSession.agent.toLowerCase() !== envelope.agentAddress.toLowerCase()) {
       await fail(options, actionId, envelope.agentAddress, routeId, 401, "INVALID_SIGNATURE", "session agent mismatch");
@@ -116,7 +124,6 @@ export const createRouteEnforcer = (options: EnforcementOptions): RouteEnforcer 
     }
     const activePassport = passport as NonNullable<typeof passport>;
 
-    const nowSec = Math.floor((options.now?.().getTime() ?? Date.now()) / 1000);
     if (activePassport.expiresAt <= nowSec) {
       await fail(options, actionId, envelope.agentAddress, routeId, 403, "PASSPORT_EXPIRED", "passport expired");
     }
@@ -200,6 +207,9 @@ export const createRouteEnforcer = (options: EnforcementOptions): RouteEnforcer 
       throw new EnforcementError(402, "PAYMENT_REQUIRED", "payment required", actionId, routeId);
     }
     const paymentProof = proof as NonNullable<typeof proof>;
+    if (paymentProof.actionId !== actionId) {
+      await fail(options, actionId, envelope.agentAddress, routeId, 402, "PAYMENT_INVALID", "payment action mismatch");
+    }
 
     if (!quote) {
       quote = await options.paymentService.buildQuote({

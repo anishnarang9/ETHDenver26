@@ -73,6 +73,7 @@ type EnforcerOptions = Parameters<typeof createRouteEnforcer>[0];
 const makeHarness = (overrides: Partial<EnforcerOptions> = {}) => {
   const app = Fastify();
   const base = makeBase();
+  const eventSink = new InMemoryEventSink();
 
   const routePolicies: Record<string, RoutePolicy> = {
     "api.enrich-wallet": {
@@ -124,7 +125,7 @@ const makeHarness = (overrides: Partial<EnforcerOptions> = {}) => {
     budgetService: new InMemoryBudgetService(),
     rateLimiter: new InMemoryRateLimiter(),
     receiptWriter: new InMemoryReceiptWriter(),
-    eventSink: new InMemoryEventSink(),
+    eventSink,
     signatureVerifier: alwaysValidSignature,
     routeIdResolver: (request) =>
       request.routeOptions.url === "/api/premium-intel" ? "api.premium-intel" : "api.enrich-wallet",
@@ -149,10 +150,26 @@ const makeHarness = (overrides: Partial<EnforcerOptions> = {}) => {
     async (request) => ({ ok: true, actionId: request.enforcementContext?.actionId })
   );
 
-  return { app, base };
+  return { app, base, eventSink };
 };
 
 describe("provider-kit enforcement", () => {
+  it("blocks requests with missing signed envelope headers", async () => {
+    const { app } = makeHarness();
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/enrich-wallet",
+      headers: {
+        "x-action-id": "a-missing-envelope",
+      },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(res.json().code).toBe("INVALID_SIGNATURE");
+  });
+
   it("returns 402 challenge when payment proof is missing", async () => {
     const { app, base } = makeHarness();
 
@@ -184,6 +201,51 @@ describe("provider-kit enforcement", () => {
     });
 
     expect(res.statusCode).toBe(403);
+  });
+
+  it("returns 403 when service allowlist blocks an otherwise allowed scope", async () => {
+    const base = makeBase();
+    const serviceBlockedPassport = new InMemoryPassportClient([
+      {
+        owner: "0x0000000000000000000000000000000000000099",
+        agent: base.agent,
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+        perCallCap: 2_000_000n,
+        dailyCap: 5_000_000n,
+        rateLimitPerMin: 2,
+        revoked: false,
+        scopes: ["enrich.wallet"],
+        services: [],
+      },
+    ]);
+    const serviceAllowedSession = new InMemorySessionClient([
+      {
+        owner: "0x0000000000000000000000000000000000000099",
+        agent: base.agent,
+        session: base.session,
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+        revoked: false,
+        scopes: ["enrich.wallet"],
+      },
+    ]);
+
+    const { app } = makeHarness({
+      passportClient: serviceBlockedPassport,
+      sessionClient: serviceAllowedSession,
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/enrich-wallet",
+      headers: {
+        ...envelopeHeaders({ agent: base.agent, session: base.session, nonce: "svc-1" }),
+        "x-action-id": "a-service-blocked",
+      },
+      payload: { walletAddress: base.agent },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe("SERVICE_FORBIDDEN");
   });
 
   it("returns 429 when rate limit is exceeded", async () => {
@@ -283,6 +345,105 @@ describe("provider-kit enforcement", () => {
     expect(second.statusCode).toBe(200);
   });
 
+  it("rejects payment proofs tied to a different action id", async () => {
+    const { app, base } = makeHarness({
+      paymentService: {
+        buildQuote: async ({ actionId, routePolicy, payTo, asset }) => ({
+          actionId,
+          routeId: routePolicy.routeId,
+          payTo,
+          asset,
+          amountAtomic: routePolicy.priceAtomic,
+          expiresAt: new Date(Date.now() + 120000).toISOString(),
+          facilitatorUrl: "https://facilitator.local",
+          protocolMode: "dual",
+        }),
+        verifyPayment: async (input) => ({
+          verified: input.proof.signature === `sig:${input.challenge.actionId}`,
+          settlementRef: `facilitator:${input.challenge.actionId}`,
+          payer: base.agent,
+          amountAtomic: input.challenge.amountAtomic,
+          mode: "facilitator",
+          reason: "action mismatch",
+        }),
+      },
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/api/enrich-wallet",
+      headers: {
+        ...envelopeHeaders({ agent: base.agent, session: base.session, nonce: "proof-a1" }),
+        "x-action-id": "a-proof-1",
+      },
+      payload: {},
+    });
+
+    const second = await app.inject({
+      method: "POST",
+      url: "/api/enrich-wallet",
+      headers: {
+        ...envelopeHeaders({ agent: base.agent, session: base.session, nonce: "proof-a2" }),
+        "x-action-id": "a-proof-2",
+        "payment-signature": "sig:a-proof-1",
+      },
+      payload: {},
+    });
+
+    expect(second.statusCode).toBe(402);
+    expect(second.json().code).toBe("PAYMENT_INVALID");
+  });
+
+  it("rejects direct-transfer proofs when verifier reports underpayment", async () => {
+    const { app, base } = makeHarness({
+      paymentService: {
+        buildQuote: async ({ actionId, routePolicy, payTo, asset }) => ({
+          actionId,
+          routeId: routePolicy.routeId,
+          payTo,
+          asset,
+          amountAtomic: routePolicy.priceAtomic,
+          expiresAt: new Date(Date.now() + 120000).toISOString(),
+          facilitatorUrl: "https://facilitator.local",
+          protocolMode: "dual",
+        }),
+        verifyPayment: async (input) => ({
+          verified: false,
+          settlementRef: "",
+          payer: base.agent,
+          amountAtomic: input.challenge.amountAtomic,
+          mode: "direct",
+          reason: "amount below quote",
+        }),
+      },
+    });
+
+    const actionId = "a-direct-low";
+    await app.inject({
+      method: "POST",
+      url: "/api/enrich-wallet",
+      headers: {
+        ...envelopeHeaders({ agent: base.agent, session: base.session, nonce: "direct-1" }),
+        "x-action-id": actionId,
+      },
+      payload: {},
+    });
+
+    const second = await app.inject({
+      method: "POST",
+      url: "/api/enrich-wallet",
+      headers: {
+        ...envelopeHeaders({ agent: base.agent, session: base.session, nonce: "direct-2" }),
+        "x-action-id": actionId,
+        "x-tx-hash": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      },
+      payload: {},
+    });
+
+    expect(second.statusCode).toBe(402);
+    expect(second.json().code).toBe("PAYMENT_INVALID");
+  });
+
   it("blocks replayed nonce", async () => {
     const { app, base } = makeHarness({
       routePolicies: {
@@ -308,6 +469,90 @@ describe("provider-kit enforcement", () => {
 
     expect(first.statusCode).toBe(200);
     expect(second.statusCode).toBe(409);
+  });
+
+  it("returns SESSION_EXPIRED for expired sessions", async () => {
+    const base = makeBase();
+    const expiredSessionClient = new InMemorySessionClient([
+      {
+        owner: "0x0000000000000000000000000000000000000099",
+        agent: base.agent,
+        session: base.session,
+        expiresAt: Math.floor(Date.now() / 1000) - 1,
+        revoked: false,
+        scopes: ["enrich.wallet"],
+      },
+    ]);
+
+    const { app } = makeHarness({ sessionClient: expiredSessionClient });
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/enrich-wallet",
+      headers: {
+        ...envelopeHeaders({ agent: base.agent, session: base.session, nonce: "sess-expired" }),
+        "x-action-id": "a-session-expired",
+      },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(res.json().code).toBe("SESSION_EXPIRED");
+  });
+
+  it("returns SESSION_REVOKED for revoked sessions", async () => {
+    const base = makeBase();
+    const revokedSessionClient = new InMemorySessionClient([
+      {
+        owner: "0x0000000000000000000000000000000000000099",
+        agent: base.agent,
+        session: base.session,
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+        revoked: true,
+        scopes: ["enrich.wallet"],
+      },
+    ]);
+
+    const { app } = makeHarness({ sessionClient: revokedSessionClient });
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/enrich-wallet",
+      headers: {
+        ...envelopeHeaders({ agent: base.agent, session: base.session, nonce: "sess-revoked" }),
+        "x-action-id": "a-session-revoked",
+      },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(res.json().code).toBe("SESSION_REVOKED");
+  });
+
+  it("blocks requests when session is delegated to a different agent", async () => {
+    const base = makeBase();
+    const mismatchedSessionClient = new InMemorySessionClient([
+      {
+        owner: "0x0000000000000000000000000000000000000099",
+        agent: "0x00000000000000000000000000000000000000ff",
+        session: base.session,
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+        revoked: false,
+        scopes: ["enrich.wallet"],
+      },
+    ]);
+
+    const { app } = makeHarness({ sessionClient: mismatchedSessionClient });
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/enrich-wallet",
+      headers: {
+        ...envelopeHeaders({ agent: base.agent, session: base.session, nonce: "sess-mismatch" }),
+        "x-action-id": "a-session-mismatch",
+      },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(res.json().code).toBe("INVALID_SIGNATURE");
   });
 
   it("blocks revoked passports", async () => {
@@ -455,6 +700,58 @@ describe("provider-kit enforcement", () => {
     });
 
     expect(second.statusCode).toBe(402);
+  });
+
+  it("records events in the expected order for successful paid flow", async () => {
+    const { app, base, eventSink } = makeHarness();
+    const actionId = "a-order";
+
+    const first = await app.inject({
+      method: "POST",
+      url: "/api/enrich-wallet",
+      headers: {
+        ...envelopeHeaders({ agent: base.agent, session: base.session, nonce: "order-1" }),
+        "x-action-id": actionId,
+      },
+      payload: {},
+    });
+    expect(first.statusCode).toBe(402);
+
+    const second = await app.inject({
+      method: "POST",
+      url: "/api/enrich-wallet",
+      headers: {
+        ...envelopeHeaders({ agent: base.agent, session: base.session, nonce: "order-2" }),
+        "x-action-id": actionId,
+        "payment-signature": "0xorderproof",
+      },
+      payload: {},
+    });
+    expect(second.statusCode).toBe(200);
+
+    const events = eventSink.events
+      .filter((event) => event.actionId === actionId)
+      .map((event) => event.eventType);
+
+    expect(events).toEqual([
+      "IDENTITY_VERIFIED",
+      "SESSION_VERIFIED",
+      "PASSPORT_VERIFIED",
+      "SCOPE_VERIFIED",
+      "SERVICE_VERIFIED",
+      "RATE_LIMIT_VERIFIED",
+      "BUDGET_VERIFIED",
+      "QUOTE_ISSUED",
+      "IDENTITY_VERIFIED",
+      "SESSION_VERIFIED",
+      "PASSPORT_VERIFIED",
+      "SCOPE_VERIFIED",
+      "SERVICE_VERIFIED",
+      "RATE_LIMIT_VERIFIED",
+      "BUDGET_VERIFIED",
+      "PAYMENT_VERIFIED",
+      "RECEIPT_RECORDED",
+    ]);
   });
 
   it("rejects expired quotes before verification", async () => {

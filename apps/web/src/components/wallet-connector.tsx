@@ -33,7 +33,7 @@ export function WalletConnector(props: {
       <button onClick={connect}>Connect Wallet</button>
       <div className="status">{status}</div>
       <div className="status">
-        The dashboard can call gateway relayer endpoints for demo speed. For production, sign tx directly from wallet.
+        Passport and session transactions are signed in-wallet. The gateway never receives owner private keys.
       </div>
     </div>
   );

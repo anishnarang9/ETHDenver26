@@ -6,7 +6,7 @@ import {
   DefaultSignatureVerifier,
   createRouteEnforcer,
   enforcementErrorHandler,
-  routePolicies,
+  getRoutePolicies,
 } from "@kite-stack/provider-kit";
 import { loadConfig } from "./config.js";
 import {
@@ -24,6 +24,7 @@ import {
   PrismaQuoteStore,
   PrismaReceiptWriter,
 } from "./storage.js";
+import { registerOperationalRoutes } from "./operationalRoutes.js";
 
 const config = loadConfig();
 
@@ -44,6 +45,10 @@ const quoteStore = new PrismaQuoteStore();
 const eventSink = new PrismaEventSink();
 const paymentService = new KitePaymentService(config.FACILITATOR_URL, clients.provider);
 const receiptWriter = new PrismaReceiptWriter(new OnchainReceiptWriter(clients.receiptContract));
+const routePolicies = getRoutePolicies(config.ROUTE_POLICY_PROFILE, {
+  enrichWalletPriceAtomic: config.TEST_PRICE_ENRICH_ATOMIC,
+  premiumIntelPriceAtomic: config.TEST_PRICE_PREMIUM_ATOMIC,
+});
 
 const enforcer = createRouteEnforcer({
   routePolicies,
@@ -131,273 +136,7 @@ app.post(
   }
 );
 
-app.get("/api/passport/:agent", async (request, reply) => {
-  const params = request.params as { agent: string };
-  const agent = params.agent as `0x${string}`;
-
-  const passport = await passportClient.getPassport(agent);
-  if (!passport) {
-    reply.status(404).send({ message: "passport not found" });
-    return;
-  }
-
-  const agentRecord = await prisma.agent.findUnique({
-    where: {
-      agentAddress: agent.toLowerCase(),
-    },
-    include: {
-      passportHistory: {
-        orderBy: {
-          createdAt: "desc",
-        },
-        take: 1,
-      },
-    },
-  });
-
-  const latestSnapshot = agentRecord?.passportHistory[0];
-
-  reply.send({
-    onchain: passport,
-    latestSnapshot: latestSnapshot
-      ? {
-          expiresAt: latestSnapshot.expiresAt.toISOString(),
-          perCallCap: latestSnapshot.perCallCap.toString(),
-          dailyCap: latestSnapshot.dailyCap.toString(),
-          rateLimitPerMin: latestSnapshot.rateLimitPerMin,
-          scopes: latestSnapshot.scopesJson,
-          services: latestSnapshot.servicesJson,
-          revoked: latestSnapshot.revoked,
-          txHash: latestSnapshot.txHash,
-        }
-      : null,
-  });
-});
-
-app.post("/api/passport/revoke", async (request, reply) => {
-  const body = request.body as { agentAddress: string; ownerPrivateKey: string };
-  const owner = new Wallet(body.ownerPrivateKey, clients.provider);
-  const passportAsOwner = clients.passportContract.connect(owner);
-
-  const tx = await (passportAsOwner as any).revokePassport(body.agentAddress);
-  const receipt = await tx.wait();
-
-  const agentRecord = await prisma.agent.findUnique({
-    where: {
-      agentAddress: body.agentAddress.toLowerCase(),
-    },
-  });
-
-  if (agentRecord) {
-    await prisma.passportSnapshot.updateMany({
-      where: {
-        agentId: agentRecord.id,
-      },
-      data: {
-        revoked: true,
-        txHash: tx.hash,
-      },
-    });
-  }
-
-  reply.send({
-    revoked: true,
-    txHash: tx.hash,
-    blockNumber: receipt?.blockNumber,
-  });
-});
-
-app.post("/api/passport/upsert", async (request, reply) => {
-  const body = request.body as {
-    agentAddress: string;
-    ownerPrivateKey: string;
-    expiresAt: number;
-    perCallCap: string;
-    dailyCap: string;
-    rateLimitPerMin: number;
-    scopes: string[];
-    services: string[];
-  };
-
-  const owner = new Wallet(body.ownerPrivateKey, clients.provider);
-  const passportAsOwner = clients.passportContract.connect(owner);
-
-  const tx = await (passportAsOwner as any).upsertPassport(
-    body.agentAddress,
-    body.expiresAt,
-    BigInt(body.perCallCap),
-    BigInt(body.dailyCap),
-    body.rateLimitPerMin,
-    body.scopes.map((scope) => ethers.id(scope)),
-    body.services.map((service) => ethers.id(service))
-  );
-
-  await tx.wait();
-
-  const agent = await prisma.agent.upsert({
-    where: { agentAddress: body.agentAddress.toLowerCase() },
-    create: {
-      agentAddress: body.agentAddress.toLowerCase(),
-      ownerAddress: owner.address.toLowerCase(),
-    },
-    update: {
-      ownerAddress: owner.address.toLowerCase(),
-    },
-  });
-
-  await prisma.passportSnapshot.create({
-    data: {
-      agentId: agent.id,
-      expiresAt: new Date(body.expiresAt * 1000),
-      perCallCap: body.perCallCap,
-      dailyCap: body.dailyCap,
-      rateLimitPerMin: body.rateLimitPerMin,
-      scopesJson: body.scopes,
-      servicesJson: body.services,
-      revoked: false,
-      txHash: tx.hash,
-    },
-  });
-
-  reply.send({
-    upserted: true,
-    txHash: tx.hash,
-    explorerLink: config.EXPLORER_BASE_URL ? `${config.EXPLORER_BASE_URL}/tx/${tx.hash}` : null,
-  });
-});
-
-app.post("/api/session/grant", async (request, reply) => {
-  const body = request.body as {
-    ownerPrivateKey: string;
-    agentAddress: string;
-    sessionAddress: string;
-    expiresAt: number;
-    scopes: string[];
-  };
-
-  const owner = new Wallet(body.ownerPrivateKey, clients.provider);
-  const sessionAsOwner = clients.sessionContract.connect(owner);
-
-  const tx = await (sessionAsOwner as any).grantSession(
-    body.agentAddress,
-    body.sessionAddress,
-    body.expiresAt,
-    body.scopes.map((scope) => ethers.id(scope))
-  );
-  await tx.wait();
-
-  const agent = await prisma.agent.upsert({
-    where: { agentAddress: body.agentAddress.toLowerCase() },
-    create: {
-      agentAddress: body.agentAddress.toLowerCase(),
-      ownerAddress: owner.address.toLowerCase(),
-    },
-    update: {
-      ownerAddress: owner.address.toLowerCase(),
-    },
-  });
-
-  await prisma.session.upsert({
-    where: {
-      sessionAddress: body.sessionAddress.toLowerCase(),
-    },
-    create: {
-      agentId: agent.id,
-      sessionAddress: body.sessionAddress.toLowerCase(),
-      expiresAt: new Date(body.expiresAt * 1000),
-      revoked: false,
-      scopeSubsetJson: body.scopes,
-      txHash: tx.hash,
-    },
-    update: {
-      expiresAt: new Date(body.expiresAt * 1000),
-      revoked: false,
-      scopeSubsetJson: body.scopes,
-      txHash: tx.hash,
-    },
-  });
-
-  reply.send({
-    granted: true,
-    txHash: tx.hash,
-  });
-});
-
-app.get("/api/actions/:actionId", async (request, reply) => {
-  const { actionId } = request.params as { actionId: string };
-
-  const action = await prisma.actionAttempt.findUnique({
-    where: { actionId },
-    include: {
-      paymentQuote: true,
-      paymentSettlement: true,
-      events: {
-        orderBy: {
-          createdAt: "asc",
-        },
-      },
-    },
-  });
-
-  if (!action) {
-    reply.status(404).send({ message: "action not found" });
-    return;
-  }
-
-  reply.send(action);
-});
-
-app.get("/api/timeline/:agent", async (request, reply) => {
-  const { agent } = request.params as { agent: string };
-
-  const events = await prisma.enforcementEvent.findMany({
-    where: {
-      agentAddress: agent.toLowerCase(),
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-    take: 200,
-  });
-
-  reply.send({ events });
-});
-
-app.get("/api/timeline/:agent/stream", async (request, reply) => {
-  const { agent } = request.params as { agent: string };
-
-  reply.raw.setHeader("Content-Type", "text/event-stream");
-  reply.raw.setHeader("Cache-Control", "no-cache");
-  reply.raw.setHeader("Connection", "keep-alive");
-  reply.raw.flushHeaders();
-
-  let closed = false;
-
-  const sendBatch = async () => {
-    const rows = await prisma.enforcementEvent.findMany({
-      where: { agentAddress: agent.toLowerCase() },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-    });
-
-    reply.raw.write(`data: ${JSON.stringify(rows)}\n\n`);
-  };
-
-  const interval = setInterval(() => {
-    if (!closed) {
-      void sendBatch();
-    }
-  }, 3000);
-
-  request.raw.on("close", () => {
-    closed = true;
-    clearInterval(interval);
-    reply.raw.end();
-  });
-
-  await sendBatch();
-  return reply;
-});
+registerOperationalRoutes(app, { prismaClient: prisma, passportClient });
 
 const start = async () => {
   await app.listen({ port: Number(config.GATEWAY_PORT), host: config.GATEWAY_HOST });
@@ -406,6 +145,9 @@ const start = async () => {
     passportRegistry: config.PASSPORT_REGISTRY_ADDRESS,
     sessionRegistry: config.SESSION_REGISTRY_ADDRESS,
     receiptLog: config.RECEIPT_LOG_ADDRESS,
+    routePolicyProfile: config.ROUTE_POLICY_PROFILE,
+    enrichPriceAtomic: routePolicies["api.enrich-wallet"]?.priceAtomic,
+    premiumPriceAtomic: routePolicies["api.premium-intel"]?.priceAtomic,
   }, "Gateway running");
 };
 

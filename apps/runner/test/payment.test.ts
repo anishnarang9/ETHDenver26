@@ -57,6 +57,22 @@ describe("runner payment helpers", () => {
     expect(result.reason).toContain("402");
   });
 
+  it("handles facilitator network failures", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("network down"))
+    );
+
+    const result = await payViaFacilitator({
+      facilitatorUrl: "https://facilitator.local",
+      challenge,
+      payer: Wallet.createRandom().address as `0x${string}`,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain("network down");
+  });
+
   it("uses injected token transfer path for direct payments", async () => {
     const txHash = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as `0x${string}`;
     const result = await payDirectTransfer({
@@ -90,5 +106,21 @@ describe("runner payment helpers", () => {
 
     expect(result.ok).toBe(false);
     expect(result.reason).toContain("reverted");
+  });
+
+  it("fails direct transfer when token transfer throws", async () => {
+    const result = await payDirectTransfer({
+      provider: new JsonRpcProvider("http://127.0.0.1:8545"),
+      paymentWallet: Wallet.createRandom(),
+      challenge,
+      tokenFactory: () => ({
+        transfer: async () => {
+          throw new Error("insufficient funds");
+        },
+      }),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain("insufficient funds");
   });
 });
