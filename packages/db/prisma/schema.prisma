@@ -148,3 +148,14 @@ model Nonce {
   @@unique([sessionAddress, nonce])
   @@index([sessionAddress, usedAt])
 }
+
+model RunEvent {
+  id       String @id @default(uuid())
+  runId    String
+  offsetMs Int
+  type     String
+  agentId  String
+  payload  Json
+
+  @@index([runId, offsetMs])
+}

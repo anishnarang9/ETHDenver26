@@ -11,6 +11,10 @@
     "typecheck": "pnpm -r typecheck",
     "dev:web": "pnpm --filter @kite-stack/web dev",
     "dev:gateway": "pnpm --filter @kite-stack/gateway dev",
+    "dev:rider": "pnpm --filter @kite-stack/rider dev",
+    "dev:foodie": "pnpm --filter @kite-stack/foodie dev",
+    "dev:eventbot": "pnpm --filter @kite-stack/eventbot dev",
+    "dev:planner": "pnpm --filter @kite-stack/planner dev",
     "dev:runner": "pnpm --filter @kite-stack/runner dev",
     "dev:customer-agent": "pnpm --filter @kite-stack/customer-agent dev",
     "dev:weather-fallback": "pnpm --filter @kite-stack/weather-fallback-provider dev",
@@ -19,7 +23,16 @@
     "db:migrate": "pnpm --filter @kite-stack/db prisma:migrate",
     "test:spend-check": "pnpm --filter @kite-stack/gateway test:spend-check"
   },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "tsx": "^4.19.2"
+  },
   "devDependencies": {
+    "next": "15.2.0",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
     "typescript": "^5.9.2"
   }
 }

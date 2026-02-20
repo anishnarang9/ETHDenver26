@@ -13,3 +13,4 @@ cache
 packages/contracts/typechain-types
 packages/contracts/ignition/deployments
 packages/db/prisma/migrations
+.vercel

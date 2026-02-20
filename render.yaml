@@ -1,0 +1,150 @@
+# Render Blueprint - ETHDenver26 TripDesk Stack
+# Deploy: Push to GitHub, then https://dashboard.render.com/blueprints → New Blueprint Instance
+
+databases:
+  - name: kite-db
+    plan: free
+    databaseName: kite_stack
+    user: kite
+
+envVarGroups:
+  - name: kite-shared-env
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: FIRECRAWL_API_KEY
+        sync: false
+      - key: AGENTMAIL_API_KEY
+        sync: false
+      - key: KITE_RPC_URL
+        value: https://rpc-testnet.gokite.ai/
+      - key: PASSPORT_REGISTRY_ADDRESS
+        value: "0x6c01C9815e747Ebdf86C0a75eEA93463e5e83626"
+      - key: SESSION_REGISTRY_ADDRESS
+        value: "0x3da599e5D01B8d3B90bC95eD65bf7fE6A5DEFb15"
+      - key: RECEIPT_LOG_ADDRESS
+        value: "0x1bD859eC8B91DB23Ae9d443339Ef5A6514a17c84"
+      - key: GATEWAY_SIGNER_PRIVATE_KEY
+        sync: false
+      - key: DEPLOYER_PRIVATE_KEY
+        sync: false
+      - key: PAYMENT_RECIPIENT
+        value: "0xcEd9b7174adc57C6d0ceB3E921a9c7e658C175A7"
+      - key: PAYMENT_ASSET
+        value: "0x0fF5393387ad2f9f691FD6Fd28e07E3969e27e63"
+      - key: FACILITATOR_URL
+        value: https://facilitator.pieverse.io
+      - key: AGENT_PRIVATE_KEY
+        sync: false
+      - key: PLANNER_AGENT_PRIVATE_KEY
+        sync: false
+      - key: PLANNER_SESSION_PRIVATE_KEY
+        sync: false
+      - key: PLANNER_PAYMENT_PRIVATE_KEY
+        sync: false
+      - key: NODE_VERSION
+        value: "20.11.0"
+
+services:
+  # ── Gateway (existing) ─────────────────────────────
+  - type: web
+    name: kite-gateway
+    runtime: node
+    plan: free
+    buildCommand: npm install -g pnpm@9.12.2 && NODE_ENV=development pnpm install && pnpm db:generate
+    startCommand: npx tsx apps/gateway/src/server.ts
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kite-db
+          property: connectionString
+      - key: GATEWAY_PORT
+        value: "10000"
+      - key: GATEWAY_HOST
+        value: "0.0.0.0"
+      - key: ROUTE_POLICY_PROFILE
+        value: test
+      - key: TEST_PRICE_ENRICH_ATOMIC
+        value: "1000"
+      - key: TEST_PRICE_PREMIUM_ATOMIC
+        value: "5000"
+      - key: MAX_KITE_SPEND_PER_DAY
+        value: "0.05"
+      - fromGroup: kite-shared-env
+
+  # ── Rider Agent ─────────────────────────────────────
+  - type: web
+    name: kite-rider
+    runtime: node
+    plan: free
+    buildCommand: npm install -g pnpm@9.12.2 && NODE_ENV=development pnpm install
+    startCommand: npx tsx apps/rider/src/index.ts
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: HOST
+        value: "0.0.0.0"
+      - fromGroup: kite-shared-env
+
+  # ── Foodie Agent ────────────────────────────────────
+  - type: web
+    name: kite-foodie
+    runtime: node
+    plan: free
+    buildCommand: npm install -g pnpm@9.12.2 && NODE_ENV=development pnpm install
+    startCommand: npx tsx apps/foodie/src/index.ts
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: HOST
+        value: "0.0.0.0"
+      - fromGroup: kite-shared-env
+
+  # ── EventBot Agent ──────────────────────────────────
+  - type: web
+    name: kite-eventbot
+    runtime: node
+    plan: free
+    buildCommand: npm install -g pnpm@9.12.2 && NODE_ENV=development pnpm install
+    startCommand: npx tsx apps/eventbot/src/index.ts
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: HOST
+        value: "0.0.0.0"
+      - fromGroup: kite-shared-env
+
+  # ── Planner Orchestrator ────────────────────────────
+  - type: web
+    name: kite-planner
+    runtime: node
+    plan: free
+    buildCommand: npm install -g pnpm@9.12.2 && NODE_ENV=development pnpm install && pnpm db:generate
+    startCommand: npx tsx apps/planner/src/index.ts
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kite-db
+          property: connectionString
+      - key: PORT
+        value: "10000"
+      - key: HOST
+        value: "0.0.0.0"
+      - key: RIDER_URL
+        fromService:
+          type: web
+          name: kite-rider
+          property: hostport
+      - key: FOODIE_URL
+        fromService:
+          type: web
+          name: kite-foodie
+          property: hostport
+      - key: EVENTBOT_URL
+        fromService:
+          type: web
+          name: kite-eventbot
+          property: hostport
+      - key: KITE_WEATHER_URL
+        value: https://x402.dev.gokite.ai
+      - fromGroup: kite-shared-env

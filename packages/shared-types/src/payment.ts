@@ -1,6 +1,19 @@
-export type KnownScopeKey = "enrich.wallet" | "premium.intel";
+export type KnownScopeKey =
+  | "enrich.wallet"
+  | "premium.intel"
+  | "transport"
+  | "food"
+  | "events"
+  | "weather"
+  | "shopping";
 export type ScopeKey = KnownScopeKey | (string & {});
-export type KnownServiceKey = "internal.enrich" | "external.premium";
+export type KnownServiceKey =
+  | "internal.enrich"
+  | "external.premium"
+  | "rider"
+  | "foodie"
+  | "eventbot"
+  | "kite-weather";
 export type ServiceKey = KnownServiceKey | (string & {});
 
 export interface RoutePolicy {
