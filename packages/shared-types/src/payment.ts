@@ -1,5 +1,5 @@
-export type ScopeKey = "enrich.wallet" | "premium.intel";
-export type ServiceKey = "internal.enrich" | "external.premium";
+export type ScopeKey = "enrich.wallet" | "premium.intel" | "transport" | "food" | "events" | "weather" | "shopping";
+export type ServiceKey = "internal.enrich" | "external.premium" | "rider" | "foodie" | "eventbot" | "kite-weather";
 
 export interface RoutePolicy {
   routeId: string;
