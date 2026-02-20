@@ -8,7 +8,7 @@
 
 ## Key Design Decisions
 
-- **Every agent has its own LLM** (GPT-4o or GPT-4o-mini) -- true autonomous decision-making, not hardcoded prompts
+- **Every agent has its own LLM** (GPT-5.2 or GPT-5.2-mini) -- true autonomous decision-making, not hardcoded prompts
 - **Pieverse facilitator** for Kite Weather API (proper gokite-aa x402); direct ERC20 transfer for agent-to-agent (shows BOTH patterns)
 - **Railway deployment** for 4 backend services + Vercel for dashboard (real public URLs)
 - **SSE replay mode** -- recorded event streams for bulletproof demos
@@ -25,24 +25,24 @@ flowchart TB
         Gmail["Human Email"]
         Dashboard["Dashboard (Vercel)"]
     end
-    subgraph orchestrator [Planner - GPT-4o]
-        PlannerLLM["GPT-4o function calling"]
+    subgraph orchestrator [Planner - GPT-5.2]
+        PlannerLLM["GPT-5.2 function calling"]
         PlannerMail["AgentMail inbox"]
         PlannerWallet["Wallet (funded)"]
     end
     subgraph specialists [Specialist Services - Railway]
         subgraph rider [Rider]
-            RiderLLM["GPT-4o-mini"]
+            RiderLLM["GPT-5.2-mini"]
             RiderFC["Firecrawl Browser"]
             RiderKit["provider-kit"]
         end
         subgraph foodie [Foodie]
-            FoodieLLM["GPT-4o-mini"]
+            FoodieLLM["GPT-5.2-mini"]
             FoodieFC["Firecrawl Browser"]
             FoodieKit["provider-kit"]
         end
         subgraph eventbot [EventBot]
-            EventLLM["GPT-4o"]
+            EventLLM["GPT-5.2"]
             EventFC["Firecrawl Browser"]
             EventKit["provider-kit"]
         end
@@ -79,20 +79,20 @@ flowchart TB
 
 | Agent | LLM | Role | x402 Price | Wallet |
 |-------|-----|------|-----------|--------|
-| Planner | GPT-4o | Orchestrator + Itinerary | N/A (client) | Funded by human (10 tokens) |
-| Rider | GPT-4o-mini | Transportation research | 0.50/search | Earns from Planner |
-| Foodie | GPT-4o-mini | Restaurant research | 1.0/search | Earns from Planner |
-| EventBot | GPT-4o | Event discovery + registration | 0.50/search, 1.0/register | Earns from Planner |
+| Planner | GPT-5.2 | Orchestrator + Itinerary | N/A (client) | Funded by human (10 tokens) |
+| Rider | GPT-5.2-mini | Transportation research | 0.50/search | Earns from Planner |
+| Foodie | GPT-5.2-mini | Restaurant research | 1.0/search | Earns from Planner |
+| EventBot | GPT-5.2 | Event discovery + registration | 0.50/search, 1.0/register | Earns from Planner |
 
 ### What Each Agent Does
 
-**Planner** -- receives human email via AgentMail webhook, uses GPT-4o function calling with tools: `hire_rider`, `hire_foodie`, `hire_eventbot`, `register_event`, `get_weather`, `email_agent`, `compile_itinerary`, `email_human`. The LLM decides task order and strategy autonomously.
+**Planner** -- receives human email via AgentMail webhook, uses GPT-5.2 function calling with tools: `hire_rider`, `hire_foodie`, `hire_eventbot`, `register_event`, `get_weather`, `email_agent`, `compile_itinerary`, `email_human`. The LLM decides task order and strategy autonomously.
 
-**Rider** -- x402 endpoint `POST /api/find-rides` gated by provider-kit. GPT-4o-mini generates Firecrawl browsing strategy, opens Google Maps to check distance/time, then searches ride estimation sites. LLM reasons about whether Uber, Lyft, or transit makes sense based on distance.
+**Rider** -- x402 endpoint `POST /api/find-rides` gated by provider-kit. GPT-5.2-mini generates Firecrawl browsing strategy, opens Google Maps to check distance/time, then searches ride estimation sites. LLM reasons about whether Uber, Lyft, or transit makes sense based on distance.
 
-**Foodie** -- x402 endpoint `POST /api/find-restaurants` gated by provider-kit. GPT-4o-mini browses Yelp/Google Maps. Uses weather data from Planner to prefer indoor vs outdoor seating. Ranks by ratings, distance, price range.
+**Foodie** -- x402 endpoint `POST /api/find-restaurants` gated by provider-kit. GPT-5.2-mini browses Yelp/Google Maps. Uses weather data from Planner to prefer indoor vs outdoor seating. Ranks by ratings, distance, price range.
 
-**EventBot** -- x402 endpoints `POST /api/find-events` and `POST /api/register-event`, both gated by provider-kit. GPT-4o browses lu.ma, extracts event details, and for registration: navigates to event page, fills form fields, clicks submit, screenshots confirmation.
+**EventBot** -- x402 endpoints `POST /api/find-events` and `POST /api/register-event`, both gated by provider-kit. GPT-5.2 browses lu.ma, extracts event details, and for registration: navigates to event page, fills form fields, clicks submit, screenshots confirmation.
 
 ---
 
@@ -141,7 +141,7 @@ Setup wizard already ran (passports deployed, sessions created, inboxes created)
 
 **Demonstrates**: LLM autonomously chose to check weather first. Not scripted.
 
-**Presenter says**: "I just sent a real email from Gmail. The Planner agent picked it up via AgentMail and is now reasoning about how to plan this trip. Notice it decided to check weather first -- that's GPT-4o making a real decision, not a hardcoded script."
+**Presenter says**: "I just sent a real email from Gmail. The Planner agent picked it up via AgentMail and is now reasoning about how to plan this trip. Notice it decided to check weather first -- that's GPT-5.2 making a real decision, not a hardcoded script."
 
 ---
 
@@ -224,7 +224,7 @@ Agents email results back to Planner via AgentMail:
 
 Specialist wallet balances tick up (Rider: 0 -> 0.50, Foodie: 0 -> 1.0, EventBot: 0 -> 0.50).
 
-**Presenter says**: "Three agents, three browsers, all moving at once. Each one has its own GPT-4o brain making decisions -- Rider saw it's a 30-min drive and checked ride prices, Foodie noticed the cold weather and prioritized indoor dining. Every search was paid via x402 on Kite. Watch the wallet balances -- Planner's going down, specialists are earning."
+**Presenter says**: "Three agents, three browsers, all moving at once. Each one has its own GPT-5.2 brain making decisions -- Rider saw it's a 30-min drive and checked ride prices, Foodie noticed the cold weather and prioritized indoor dining. Every search was paid via x402 on Kite. Watch the wallet balances -- Planner's going down, specialists are earning."
 
 ---
 
@@ -236,12 +236,12 @@ Specialist wallet balances tick up (Rider: 0 -> 0.50, Foodie: 0 -> 1.0, EventBot
 3. Enforcement pipeline: all 10 steps green
 4. EventBot's browser navigates to specific Luma event page
 5. **LIVE form filling** -- audience watches the bot:
-   - GPT-4o: "I see a Register button. Clicking..."
+   - GPT-5.2: "I see a Register button. Clicking..."
    - Browser clicks Register
    - Form appears
-   - GPT-4o: "Filling name: Rachit, email: rachit@example.com"
+   - GPT-5.2: "Filling name: Rachit, email: rachit@example.com"
    - Browser types into fields in real-time
-   - GPT-4o: "Submitting..."
+   - GPT-5.2: "Submitting..."
    - Browser clicks Submit
    - Confirmation appears
    - Screenshot captured
@@ -455,7 +455,7 @@ Replay: `GET /api/replay/:runId` streams events with setTimeout delays matching 
 
 1. Pre-scout 2-3 real Luma events with simple registration forms (no CAPTCHA)
 2. Target "ETHDenver" and "AI Denver" events in Feb 2026
-3. Firecrawl browser session: navigate -> GPT-4o analyzes page -> finds register button -> fills form -> submits -> screenshots confirmation
+3. Firecrawl browser session: navigate -> GPT-5.2 analyzes page -> finds register button -> fills form -> submits -> screenshots confirmation
 4. Fallback: target events with email-only registration
 5. Verify registration shows on event attendee list
 6. Have backup events ready
@@ -498,7 +498,7 @@ Fastify services listen on `::` for Railway compatibility.
 | 2 | Rider agent (Fastify + provider-kit + LLM + Firecrawl) | 3 | P0 |
 | 3 | Foodie agent (same pattern) | 2 | P0 |
 | 4 | EventBot agent (LLM + Luma search + form filling) | 4 | P0 |
-| 5 | Planner orchestrator (GPT-4o tools + AgentMail + callPricedRoute) | 4 | P0 |
+| 5 | Planner orchestrator (GPT-5.2 tools + AgentMail + callPricedRoute) | 4 | P0 |
 | 6 | Pieverse integration (payViaPieverse for Weather API) | 2 | P0 |
 | 7 | Dashboard (Tailwind + shadcn + all panels) | 5 | P0 |
 | 8 | SSE streaming (all agents -> dashboard) | 2 | P0 |

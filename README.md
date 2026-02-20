@@ -17,7 +17,7 @@
 [![Next.js](https://img.shields.io/badge/Next.js_15-000000?style=flat-square&logo=next.js&logoColor=white)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![Fastify](https://img.shields.io/badge/Fastify-000000?style=flat-square&logo=fastify&logoColor=white)](https://fastify.dev/)
-[![OpenAI](https://img.shields.io/badge/GPT--4o-412991?style=flat-square&logo=openai&logoColor=white)](https://openai.com/)
+[![OpenAI](https://img.shields.io/badge/GPT--5.2-412991?style=flat-square&logo=openai&logoColor=white)](https://openai.com/)
 [![Prisma](https://img.shields.io/badge/Prisma-2D3748?style=flat-square&logo=prisma&logoColor=white)](https://www.prisma.io/)
 [![Tailwind](https://img.shields.io/badge/Tailwind_4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![pnpm](https://img.shields.io/badge/pnpm-F69220?style=flat-square&logo=pnpm&logoColor=white)](https://pnpm.io/)
@@ -56,7 +56,7 @@ An owner can **revoke any agent's passport** in real-time, instantly cutting off
                                     |
                                     v
                         +-----------------------+
-                        |    PLANNER (GPT-4o)   |
+                        |   PLANNER (GPT-5.2)   |
                         |   Orchestrator Agent  |
                         +--+--------+--------+--+
                            |        |        |
@@ -68,7 +68,7 @@ An owner can **revoke any agent's passport** in real-time, instantly cutting off
                   v           v           v            v
             +---------+ +---------+ +-----------+ +---------+
             |  RIDER  | | FOODIE  | | EVENTBOT  | | WEATHER |
-            | GPT-4o  | | GPT-4o  | |  GPT-4o   | |  Kite   |
+            | GPT-5.2 | | GPT-5.2 | |  GPT-5.2  | |  Kite   |
             |  mini   | |  mini   | |           | |  x402   |
             +----+----+ +----+----+ +-----+-----+ +---------+
                  |           |            |
@@ -97,7 +97,7 @@ flowchart TB
     end
 
     subgraph Planner["Planner Agent"]
-        LLM["GPT-4o Function Calling"]
+        LLM["GPT-5.2 Function Calling"]
         TOOLS["Tools: hire, email, weather"]
     end
 
@@ -208,10 +208,10 @@ The dashboard visualizes this pipeline in real-time with animated step-by-step p
 
 | Agent | Role | LLM | Price | Capabilities |
 |-------|------|-----|-------|-------------|
-| **Planner** | Orchestrator | GPT-4o | -- | Hires specialists, manages budget, compiles itinerary |
-| **Rider** | Transport | GPT-4o-mini | 0.5 KITE/call | Google Maps, ride-hailing research via Firecrawl |
-| **Foodie** | Restaurants | GPT-4o-mini | 1.0 KITE/call | Yelp, Google Maps restaurant discovery |
-| **EventBot** | Events | GPT-4o | 0.5-1.0 KITE | lu.ma event search + real form-filling registration |
+| **Planner** | Orchestrator | GPT-5.2 | -- | Hires specialists, manages budget, compiles itinerary |
+| **Rider** | Transport | GPT-5.2-mini | 0.5 KITE/call | Google Maps, ride-hailing research via Firecrawl |
+| **Foodie** | Restaurants | GPT-5.2-mini | 1.0 KITE/call | Yelp, Google Maps restaurant discovery |
+| **EventBot** | Events | GPT-5.2 | 0.5-1.0 KITE | lu.ma event search + real form-filling registration |
 | **Weather** | Climate | Kite API | x402 | Real Kite Weather API via Pieverse facilitator |
 
 Each agent has its own wallet, LLM brain, and Firecrawl browser session. The Planner starts with **10 KITE tokens** and distributes them to specialists as payment for work.
@@ -270,10 +270,10 @@ ETHDenver26/
 +-- apps/
 |   +-- web/              Next.js 15 dashboard (React 19, Tailwind 4, Framer Motion)
 |   +-- gateway/           Fastify enforcement API + x402 middleware
-|   +-- planner/           Orchestrator agent (GPT-4o, function calling)
-|   +-- rider/             Transport specialist (GPT-4o-mini, Firecrawl)
-|   +-- foodie/            Restaurant specialist (GPT-4o-mini, Firecrawl)
-|   +-- eventbot/          Event specialist (GPT-4o, lu.ma registration)
+|   +-- planner/           Orchestrator agent (GPT-5.2, function calling)
+|   +-- rider/             Transport specialist (GPT-5.2-mini, Firecrawl)
+|   +-- foodie/            Restaurant specialist (GPT-5.2-mini, Firecrawl)
+|   +-- eventbot/          Event specialist (GPT-5.2, lu.ma registration)
 |   +-- runner/            Autonomous test loop CLI
 |
 +-- packages/
@@ -317,7 +317,7 @@ ETHDenver26/
 <div align="center">
 
 ![Fastify](https://img.shields.io/badge/Fastify-000?style=for-the-badge&logo=fastify)
-![OpenAI](https://img.shields.io/badge/GPT--4o-412991?style=for-the-badge&logo=openai&logoColor=white)
+![OpenAI](https://img.shields.io/badge/GPT--5.2-412991?style=for-the-badge&logo=openai&logoColor=white)
 ![Prisma](https://img.shields.io/badge/Prisma-2D3748?style=for-the-badge&logo=prisma&logoColor=white)
 ![Postgres](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
 
@@ -370,7 +370,7 @@ ETHDenver26/
 - Dual header protocol support
 
 ### Multi-Agent Orchestration
-- GPT-4o function-calling decision loops
+- GPT-5.2 function-calling decision loops
 - Agents autonomously choose tools
 - Inter-agent email via AgentMail
 - Budget distribution and tracking

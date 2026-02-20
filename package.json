@@ -21,6 +21,12 @@
     "db:migrate": "pnpm --filter @kite-stack/db prisma:migrate",
     "test:spend-check": "pnpm --filter @kite-stack/gateway test:spend-check"
   },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "tsx": "^4.19.2"
+  },
   "devDependencies": {
     "typescript": "^5.9.2"
   }

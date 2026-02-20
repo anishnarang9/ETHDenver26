@@ -108,7 +108,7 @@ export async function handleFindRestaurants(opts: {
   const weatherContext = opts.weather ? `\nCurrent weather: ${opts.weather}. Consider indoor vs outdoor seating accordingly.` : "";
 
   const result = await runAgentLoop({
-    model: "gpt-4o-mini",
+    model: "gpt-5.2-mini",
     systemPrompt: `You are a restaurant research agent. Given a location and preferences, find the best dining options.
 If you have browser tools, search Yelp and Google Maps for restaurants.${weatherContext}
 Consider ratings, distance, price range, cuisine type, and hours of operation.

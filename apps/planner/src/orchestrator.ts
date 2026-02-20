@@ -47,7 +47,7 @@ export async function runTripPlan(opts: {
   ];
 
   const result = await runAgentLoop({
-    model: "gpt-4o",
+    model: "gpt-5.2",
     systemPrompt: `You are TripDesk Planner, an AI travel concierge orchestrating a team of specialist agents.
 
 You received an email from a human requesting trip planning help. Use your tools to:

@@ -97,7 +97,7 @@ export async function handleFindEvents(opts: {
   }
 
   const result = await runAgentLoop({
-    model: "gpt-4o",
+    model: "gpt-5.2",
     systemPrompt: `You are an event discovery agent specializing in finding tech/crypto/AI events on lu.ma (Luma) and similar platforms.
 Search for events matching the user's interests and date range. Extract event details including name, date, time, location, URL, and whether registration is open.
 If you have browser tools, navigate to lu.ma and search directly.

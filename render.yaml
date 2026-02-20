@@ -1,6 +1,5 @@
 # Render Blueprint - ETHDenver26 TripDesk Stack
 # Deploy: Push to GitHub, then https://dashboard.render.com/blueprints → New Blueprint Instance
-# All services share the same env group for secrets.
 
 databases:
   - name: kite-db
@@ -43,6 +42,8 @@ envVarGroups:
         sync: false
       - key: PLANNER_PAYMENT_PRIVATE_KEY
         sync: false
+      - key: NODE_VERSION
+        value: "20.11.0"
 
 services:
   # ── Gateway (existing) ─────────────────────────────
@@ -50,8 +51,8 @@ services:
     name: kite-gateway
     runtime: node
     plan: free
-    buildCommand: npm install -g pnpm@9.12.2 && pnpm install && pnpm --filter @kite-stack/shared-types build && pnpm --filter @kite-stack/provider-kit build && pnpm --filter @kite-stack/db build && pnpm db:generate && pnpm --filter @kite-stack/gateway build
-    startCommand: node apps/gateway/dist/server.js
+    buildCommand: npm install -g pnpm@9.12.2 && pnpm install && pnpm db:generate
+    startCommand: npx tsx apps/gateway/src/server.ts
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -69,8 +70,6 @@ services:
         value: "5000"
       - key: MAX_KITE_SPEND_PER_DAY
         value: "0.05"
-      - key: NODE_ENV
-        value: production
       - fromGroup: kite-shared-env
 
   # ── Rider Agent ─────────────────────────────────────
@@ -78,15 +77,13 @@ services:
     name: kite-rider
     runtime: node
     plan: free
-    buildCommand: npm install -g pnpm@9.12.2 && pnpm install && pnpm --filter @kite-stack/shared-types build && pnpm --filter @kite-stack/provider-kit build && pnpm --filter @kite-stack/agent-core build && pnpm --filter @kite-stack/rider build
-    startCommand: node apps/rider/dist/index.js
+    buildCommand: npm install -g pnpm@9.12.2 && pnpm install
+    startCommand: npx tsx apps/rider/src/index.ts
     envVars:
       - key: PORT
         value: "10000"
       - key: HOST
         value: "0.0.0.0"
-      - key: NODE_ENV
-        value: production
       - fromGroup: kite-shared-env
 
   # ── Foodie Agent ────────────────────────────────────
@@ -94,15 +91,13 @@ services:
     name: kite-foodie
     runtime: node
     plan: free
-    buildCommand: npm install -g pnpm@9.12.2 && pnpm install && pnpm --filter @kite-stack/shared-types build && pnpm --filter @kite-stack/provider-kit build && pnpm --filter @kite-stack/agent-core build && pnpm --filter @kite-stack/foodie build
-    startCommand: node apps/foodie/dist/index.js
+    buildCommand: npm install -g pnpm@9.12.2 && pnpm install
+    startCommand: npx tsx apps/foodie/src/index.ts
     envVars:
       - key: PORT
         value: "10000"
       - key: HOST
         value: "0.0.0.0"
-      - key: NODE_ENV
-        value: production
       - fromGroup: kite-shared-env
 
   # ── EventBot Agent ──────────────────────────────────
@@ -110,15 +105,13 @@ services:
     name: kite-eventbot
     runtime: node
     plan: free
-    buildCommand: npm install -g pnpm@9.12.2 && pnpm install && pnpm --filter @kite-stack/shared-types build && pnpm --filter @kite-stack/provider-kit build && pnpm --filter @kite-stack/agent-core build && pnpm --filter @kite-stack/eventbot build
-    startCommand: node apps/eventbot/dist/index.js
+    buildCommand: npm install -g pnpm@9.12.2 && pnpm install
+    startCommand: npx tsx apps/eventbot/src/index.ts
     envVars:
       - key: PORT
         value: "10000"
       - key: HOST
         value: "0.0.0.0"
-      - key: NODE_ENV
-        value: production
       - fromGroup: kite-shared-env
 
   # ── Planner Orchestrator ────────────────────────────
@@ -126,8 +119,8 @@ services:
     name: kite-planner
     runtime: node
     plan: free
-    buildCommand: npm install -g pnpm@9.12.2 && pnpm install && pnpm --filter @kite-stack/shared-types build && pnpm --filter @kite-stack/agent-core build && pnpm --filter @kite-stack/db build && pnpm db:generate && pnpm --filter @kite-stack/planner build
-    startCommand: node apps/planner/dist/index.js
+    buildCommand: npm install -g pnpm@9.12.2 && pnpm install && pnpm db:generate
+    startCommand: npx tsx apps/planner/src/index.ts
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -154,6 +147,4 @@ services:
           property: hostport
       - key: KITE_WEATHER_URL
         value: https://x402.dev.gokite.ai
-      - key: NODE_ENV
-        value: production
       - fromGroup: kite-shared-env

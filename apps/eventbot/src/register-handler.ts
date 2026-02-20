@@ -112,7 +112,7 @@ export async function handleRegisterEvent(opts: {
   ];
 
   const result = await runAgentLoop({
-    model: "gpt-4o",
+    model: "gpt-5.2",
     systemPrompt: `You are an event registration agent. Your task is to navigate to a Luma event page, find the registration form, and complete registration.
 
 Steps:
