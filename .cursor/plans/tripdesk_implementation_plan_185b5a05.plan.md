@@ -6,16 +6,16 @@ todos:
     content: Create packages/agent-core/ with llm.ts (OpenAI function calling loop), browser.ts (Firecrawl session manager), agentmail.ts (REST client), pieverse.ts (v2 settle/verify), sse-emitter.ts (SSE hub + DB recording)
     status: pending
   - id: rider
-    content: Create apps/rider/ -- Fastify + provider-kit enforcement + GPT-4o-mini LLM handler with Firecrawl browser for Google Maps / ride estimation. POST /api/find-rides gated at 0.50 tokens
+    content: Create apps/rider/ -- Fastify + provider-kit enforcement + GPT-5-mini LLM handler with Firecrawl browser for Google Maps / ride estimation. POST /api/find-rides gated at 0.50 tokens
     status: pending
   - id: foodie
-    content: Create apps/foodie/ -- same pattern as Rider, GPT-4o-mini for Yelp/Google Maps restaurant search. POST /api/find-restaurants gated at 1.0 token
+    content: Create apps/foodie/ -- same pattern as Rider, GPT-5-mini for Yelp/Google Maps restaurant search. POST /api/find-restaurants gated at 1.0 token
     status: pending
   - id: eventbot
-    content: "Create apps/eventbot/ -- GPT-4o (full model) for Luma event search + form-filling registration. TWO endpoints: POST /api/find-events (0.50) and POST /api/register-event (1.0). Test on real Luma events"
+    content: "Create apps/eventbot/ -- GPT-5.2 (full model) for Luma event search + form-filling registration. TWO endpoints: POST /api/find-events (0.50) and POST /api/register-event (1.0). Test on real Luma events"
     status: pending
   - id: planner
-    content: Create apps/planner/ -- GPT-4o orchestrator with function calling tools (get_weather via Pieverse, hire_rider/foodie/eventbot via callPricedRoute, email_agent/email_human via AgentMail). SSE endpoint at GET /api/events, replay at GET /api/replay/:runId
+    content: Create apps/planner/ -- GPT-5.2 orchestrator with function calling tools (get_weather via Pieverse, hire_rider/foodie/eventbot via callPricedRoute, email_agent/email_human via AgentMail). SSE endpoint at GET /api/events, replay at GET /api/replay/:runId
     status: pending
   - id: dashboard
     content: "Overhaul apps/web/ -- add Tailwind + shadcn + framer-motion. Build /console page with: 3 AgentBrowserPanels (Firecrawl iframes + thought bubbles), EmailThread, EnforcementPipeline (10-step animated), WalletBalances (live polling), TransactionFeed (Kitescan links), MissionControl (revoke/trigger buttons), ReplayButton"
@@ -99,7 +99,7 @@ export interface LLMCallResult {
 }
 
 export async function runAgentLoop(opts: {
-  model: "gpt-4o" | "gpt-4o-mini";
+  model: "gpt-5-2" | "gpt-5-mini";
   systemPrompt: string;
   userMessage: string;
   tools: AgentTool[];
@@ -271,7 +271,7 @@ Same Fastify + provider-kit structure. TWO x402-gated endpoints.
 
 **Handler for find-events**: LLM browses lu.ma, searches for events matching interests/dates, extracts details.
 
-**Handler for register-event**: LLM navigates to specific event URL, finds registration form, fills name+email fields, clicks submit, takes confirmation screenshot. This is the most complex handler -- needs GPT-4o (not mini) for reliable form interaction.
+**Handler for register-event**: LLM navigates to specific event URL, finds registration form, fills name+email fields, clicks submit, takes confirmation screenshot. This is the most complex handler -- needs GPT-5.2 (not mini) for reliable form interaction.
 
 ---
 
@@ -288,7 +288,7 @@ The central brain. NOT a provider-kit-gated service (it's the CLIENT, not a serv
 - `GET /api/replay/:runId` -- SSE replay endpoint
 - `GET /health`
 
-`**src/orchestrator.ts**` -- The GPT-4o orchestrator:
+`**src/orchestrator.ts**` -- The GPT-5.2 orchestrator:
 
 ```typescript
 export async function runTripPlan(opts: {
@@ -452,7 +452,7 @@ Run `pnpm db:migrate` after adding.
 ### Phase 3: Foodie + EventBot (`apps/foodie/`, `apps/eventbot/`) -- ~5h
 
 1. Foodie: clone Rider pattern, change system prompt and route policy (scope: food, price: 1.0)
-2. EventBot: clone Rider pattern, TWO endpoints, GPT-4o model (not mini)
+2. EventBot: clone Rider pattern, TWO endpoints, GPT-5.2 model (not mini)
 3. EventBot register handler: LLM navigates to Luma event URL, identifies form, fills fields, submits
 4. Test Luma registration on 2-3 pre-scouted events
 5. Verify all three specialists work independently with mock payment headers
@@ -460,7 +460,7 @@ Run `pnpm db:migrate` after adding.
 ### Phase 4: Planner Orchestrator (`apps/planner/`) -- ~4h
 
 1. Create Fastify server with AgentMail webhook endpoint
-2. Implement `runTripPlan()` using `runAgentLoop()` with GPT-4o
+2. Implement `runTripPlan()` using `runAgentLoop()` with GPT-5.2
 3. Define tools: `get_weather`, `hire_rider`, `hire_foodie`, `hire_eventbot`, `register_event`, `email_agent`, `email_human`
 4. `get_weather` tool: call Kite Weather API, handle 402, settle via Pieverse v2
 5. `hire_*` tools: adapt `callPricedRoute()` from runner to call specialist URLs with direct ERC20 transfer
@@ -605,7 +605,7 @@ apps/planner/
     index.ts         -- entry point
     server.ts        -- Fastify + webhook + SSE + replay endpoints
     config.ts        -- env var loading (zod validated)
-    orchestrator.ts  -- GPT-4o runTripPlan with all tools
+    orchestrator.ts  -- GPT-5.2 runTripPlan with all tools
     tools/
       weather.ts     -- get_weather (Pieverse x402 flow)
       hire.ts        -- hire_rider, hire_foodie, hire_eventbot (callPricedRoute)
