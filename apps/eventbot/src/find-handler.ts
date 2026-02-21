@@ -48,7 +48,7 @@ export async function handleFindEvents(opts: {
         description: "Navigate to a URL in the browser",
         parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] },
         execute: async (args: Record<string, unknown>) => {
-          const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `await page.goto('${args.url}', { waitUntil: 'networkidle2', timeout: 15000 }); const title = await page.title(); title;` });
+          const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `await page.goto('${args.url}', { waitUntil: 'networkidle', timeout: 15000 }); var _title = await page.title(); _title;` });
           return { title: result.output };
         },
       },
@@ -57,7 +57,7 @@ export async function handleFindEvents(opts: {
         description: "Type search text and press Enter",
         parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
         execute: async (args: Record<string, unknown>) => {
-          const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `await page.keyboard.type('${args.text}'); await page.keyboard.press('Enter'); await page.waitForTimeout(3000); const text = await page.evaluate(() => document.body.innerText.substring(0, 3000)); text;` });
+          const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `await page.keyboard.type('${args.text}'); await page.keyboard.press('Enter'); await page.waitForTimeout(3000); var _text = await page.evaluate(() => document.body.innerText.substring(0, 3000)); _text;` });
           return { pageText: result.output };
         },
       },
@@ -79,7 +79,7 @@ export async function handleFindEvents(opts: {
         parameters: { type: "object", properties: { maxLength: { type: "number" } } },
         execute: async (args: Record<string, unknown>) => {
           const maxLen = (args.maxLength as number) || 4000;
-          const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `const text = await page.evaluate(() => document.body.innerText); text.substring(0, ${maxLen});` });
+          const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `var _text = await page.evaluate(() => document.body.innerText); _text.substring(0, ${maxLen});` });
           return { text: result.output };
         },
       },
@@ -88,7 +88,7 @@ export async function handleFindEvents(opts: {
         description: "Take a screenshot of the current page",
         parameters: { type: "object", properties: {} },
         execute: async () => {
-          const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `const s = await page.screenshot({ encoding: 'base64' }); s;` });
+          const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `var _s = await page.screenshot({ encoding: 'base64' }); _s;` });
           if (result.screenshot) screenshots.push(result.screenshot);
           return { captured: true };
         },

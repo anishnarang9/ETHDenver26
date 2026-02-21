@@ -57,7 +57,7 @@ export async function handleFindRides(opts: {
         execute: async (args: Record<string, unknown>) => {
           const result = await executeBrowserCode({
             apiKey, sessionId: sid,
-            code: `await page.goto('${args.url}', { waitUntil: 'networkidle2', timeout: 15000 }); const title = await page.title(); title;`,
+            code: `await page.goto('${args.url}', { waitUntil: 'networkidle', timeout: 15000 }); var _title = await page.title(); _title;`,
           });
           return { title: result.output };
         },
@@ -69,7 +69,7 @@ export async function handleFindRides(opts: {
         execute: async (args: Record<string, unknown>) => {
           const result = await executeBrowserCode({
             apiKey, sessionId: sid,
-            code: `await page.keyboard.type('${args.text}'); await page.keyboard.press('Enter'); await page.waitForTimeout(3000); const text = await page.evaluate(() => document.body.innerText.substring(0, 2000)); text;`,
+            code: `await page.keyboard.type('${args.text}'); await page.keyboard.press('Enter'); await page.waitForTimeout(3000); var _text = await page.evaluate(() => document.body.innerText.substring(0, 2000)); _text;`,
           });
           return { pageText: result.output };
         },
@@ -81,7 +81,7 @@ export async function handleFindRides(opts: {
         execute: async () => {
           const result = await executeBrowserCode({
             apiKey, sessionId: sid,
-            code: `const screenshot = await page.screenshot({ encoding: 'base64' }); screenshot;`,
+            code: `var _screenshot = await page.screenshot({ encoding: 'base64' }); _screenshot;`,
           });
           if (result.screenshot) screenshots.push(result.screenshot);
           return { captured: true };
@@ -95,7 +95,7 @@ export async function handleFindRides(opts: {
           const maxLen = (args.maxLength as number) || 3000;
           const result = await executeBrowserCode({
             apiKey, sessionId: sid,
-            code: `const text = await page.evaluate(() => document.body.innerText); text.substring(0, ${maxLen});`,
+            code: `var _text = await page.evaluate(() => document.body.innerText); _text.substring(0, ${maxLen});`,
           });
           return { text: result.output };
         },
