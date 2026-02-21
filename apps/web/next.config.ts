@@ -1,9 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  turbopack: {
-    root: process.cwd(),
-  },
+  // Webpack mode is used via package scripts for stable module resolution in this monorepo.
 };
 
 export default nextConfig;
