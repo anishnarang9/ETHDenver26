@@ -1,4 +1,4 @@
-export type AgentId = "planner" | "rider" | "foodie" | "eventbot";
+export type AgentId = string;
 
 export interface EmailEvent {
   id: string;
@@ -11,7 +11,7 @@ export interface EmailEvent {
 }
 
 export interface BrowserPanelState {
-  agentId: AgentId;
+  agentId: string;
   liveViewUrl?: string;
   status: "standby" | "active" | "closed" | "revoked";
   sessionId?: string;
@@ -41,6 +41,35 @@ export interface SSEMessage {
   payload: Record<string, unknown>;
   runId?: string;
   offsetMs?: number;
+}
+
+export interface SpawnedAgentInfo {
+  id: string;
+  role: string;
+  address?: string;
+  status: string;
+  step?: string;
+  inboxAddress?: string;
+  fundingTxHash?: string;
+  passportTxHash?: string;
+  sessionTxHash?: string;
+  createdAt?: string;
+}
+
+export interface AgentNode {
+  id: string;
+  role: string;
+  status: string;
+  address?: string;
+  inboxAddress?: string;
+}
+
+export interface EmailEdge {
+  id: string;
+  fromAgentId: string;
+  toAgentId: string;
+  subject?: string;
+  timestamp: number;
 }
 
 export interface TimelineEvent {

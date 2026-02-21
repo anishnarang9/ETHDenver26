@@ -38,6 +38,10 @@ export function useSSE(url: string, onMessage: (msg: SSEMessage) => void) {
     const eventTypes = [
       "email_received",
       "email_sent",
+      "agent_email_received",
+      "agent_email_sent",
+      "agent_spawning",
+      "agent_spawned",
       "llm_thinking",
       "llm_tool_call",
       "browser_session",
@@ -48,6 +52,8 @@ export function useSSE(url: string, onMessage: (msg: SSEMessage) => void) {
       "payment_failed",
       "wallet_update",
       "agent_status",
+      "orchestrator_phase",
+      "orchestrator_decision",
       "error",
       "replay_complete",
     ];

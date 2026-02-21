@@ -37,10 +37,26 @@ export function MissionControl({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action }),
       });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
       const data = (await response.json()) as { runId?: string };
       setStatus(`${action} started (run ${data.runId?.slice(0, 8) || "n/a"})`);
     } catch (error) {
       setStatus(`Error: ${(error as Error).message}`);
+    }
+  };
+
+  const kill = async () => {
+    setStatus("Sending kill signal...");
+    try {
+      const response = await fetch(`${plannerUrl}/api/kill`, { method: "POST" });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+      setStatus("All agents killed.");
+    } catch (error) {
+      setStatus(`Kill failed: ${(error as Error).message}`);
     }
   };
 
@@ -76,6 +92,9 @@ export function MissionControl({
         ))}
         <button className="danger-button" onClick={revoke}>
           Revoke Passport
+        </button>
+        <button className="danger-button" onClick={() => void kill()}>
+          Kill Agents
         </button>
       </div>
 

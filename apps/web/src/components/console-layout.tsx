@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { AgentBrowserPanel } from "./agent-browser-panel";
@@ -52,6 +52,21 @@ function mapTimelineToSteps(events: Array<{ eventType: string; detailsJson: Reco
 export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
   const { state, dispatch } = useSSEState();
 
+  const visibleAgents = useMemo(() => {
+    const dynamic = state.spawnedAgents.filter((agent) => agent.id !== "planner");
+    if (dynamic.length > 0) {
+      return dynamic.map((agent) => ({
+        id: agent.id,
+        label: agent.role || agent.id,
+      }));
+    }
+    return [
+      { id: "rider", label: "rider" },
+      { id: "foodie", label: "foodie" },
+      { id: "eventbot", label: "eventbot" },
+    ];
+  }, [state.spawnedAgents]);
+
   useEffect(() => {
     const agent = process.env.NEXT_PUBLIC_PLANNER_ADDRESS;
     if (!agent) {
@@ -87,6 +102,37 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
     return () => clearInterval(interval);
   }, [dispatch]);
 
+  useEffect(() => {
+    const pollAgents = async () => {
+      try {
+        const response = await fetch(`${plannerUrl}/api/agents`, { cache: "no-store" });
+        if (!response.ok) return;
+        const payload = (await response.json()) as {
+          agents?: Array<{
+            id: string;
+            role: string;
+            address?: string;
+            status: string;
+            fundingTxHash?: string;
+            passportTxHash?: string;
+            sessionTxHash?: string;
+            createdAt?: string;
+          }>;
+        };
+        dispatch({ type: "SET_SPAWNED_AGENTS", agents: payload.agents || [] });
+      } catch {
+        // ignore planner poll failures
+      }
+    };
+
+    void pollAgents();
+    const interval = setInterval(() => {
+      void pollAgents();
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [dispatch, plannerUrl]);
+
   return (
     <>
       <div className="dashboard-home-wrap">
@@ -110,9 +156,14 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
       </div>
 
       <div className="agent-grid" style={{ marginTop: 14 }}>
-        <AgentBrowserPanel label="Rider" browser={state.browsers.rider} thought={state.thoughts.rider} />
-        <AgentBrowserPanel label="Foodie" browser={state.browsers.foodie} thought={state.thoughts.foodie} />
-        <AgentBrowserPanel label="EventBot" browser={state.browsers.eventbot} thought={state.thoughts.eventbot} />
+        {visibleAgents.map((agent) => (
+          <AgentBrowserPanel
+            key={agent.id}
+            label={agent.label}
+            browser={state.browsers[agent.id]}
+            thought={state.thoughts[agent.id]}
+          />
+        ))}
       </div>
 
       <div className="console-grid">

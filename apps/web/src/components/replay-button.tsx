@@ -8,15 +8,22 @@ export function ReplayButton({ plannerUrl }: { plannerUrl: string }) {
   const { switchUrl, dispatch } = useSSEState();
 
   const replay = async () => {
-    const response = await fetch(`${plannerUrl}/api/runs`);
-    const data = (await response.json()) as { runs?: Array<{ runId: string }> };
-    const latest = data.runs?.[0]?.runId;
-    if (!latest) {
-      return;
+    try {
+      const response = await fetch(`${plannerUrl}/api/runs`);
+      if (!response.ok) {
+        return;
+      }
+      const data = (await response.json()) as { runs?: Array<{ runId: string }> };
+      const latest = data.runs?.[0]?.runId;
+      if (!latest) {
+        return;
+      }
+      dispatch({ type: "RESET" });
+      switchUrl(`${plannerUrl}/api/replay/${latest}`);
+      setIsReplaying(true);
+    } catch {
+      // ignore replay errors in UI control
     }
-    dispatch({ type: "RESET" });
-    switchUrl(`${plannerUrl}/api/replay/${latest}`);
-    setIsReplaying(true);
   };
 
   const live = () => {
