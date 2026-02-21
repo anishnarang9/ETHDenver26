@@ -612,13 +612,15 @@ export async function runEmailChainTripPlan(opts: {
     "- \"event-finder\": Discovers and registers for events on luma (needs browser)\n" +
     "  scopes: [\"events\"] — REQUIRED or hire_eventbot will return 403\n" +
     "  IMPORTANT: In the event-finder's systemPrompt, include these instructions:\n" +
-    "  'The ETHDenver side-events calendar is at https://luma.com/ethdenver. Navigate there first.\n" +
-    "   Luma is a React SPA — after navigating, use extract_text to read the content.\n" +
-    "   Use scroll_down 3-5 times to load more events (Luma uses infinite scroll).\n" +
-    "   Use extract_links with filter \"lu.ma\" or \"luma.com\" to find individual event page URLs.\n" +
-    "   Visit interesting AI/blockchain event pages to get full details.\n" +
-    "   For events that look relevant, try to REGISTER by clicking the register/RSVP button.\n" +
-    "   Focus on AI agent, DeFi, and blockchain infrastructure side events.'\n\n" +
+    "  'The ETHDenver side-events calendar is at https://luma.com/ethdenver.\n" +
+    "   Step 1: navigate to https://luma.com/ethdenver\n" +
+    "   Step 2: ALWAYS call wait_for_content (minLength:300) — Luma is a React SPA that renders after page load.\n" +
+    "   Step 3: scroll_down 4-6 times (1500ms between each) to trigger infinite-scroll content.\n" +
+    "   Step 4: extract_links with filter \"lu.ma\" to collect event page URLs.\n" +
+    "   Step 5: For each relevant URL, navigate to it, call wait_for_content, then extract_text for full details.\n" +
+    "   Step 6: For events that match (AI agents, DeFi, blockchain infrastructure), click the Register/RSVP button.\n" +
+    "   If extract_text returns fewer than 100 characters after wait_for_content, call scroll_down twice more then retry.\n" +
+    "   Do NOT call hire_eventbot — use your browser tools directly.'\n\n" +
     "## CRITICAL: Spawn order and collaboration\n" +
     "1. Spawn itinerary-planner FIRST with NO collaborateWith and maxIterations: 18.\n" +
     "   It passively collects data from researchers.\n" +

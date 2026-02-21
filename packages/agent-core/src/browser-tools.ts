@@ -55,19 +55,58 @@ export async function createBrowserToolsWithSession(opts: {
     tools.push(
       {
         name: "navigate",
-        description: "Navigate to a URL in the browser",
+        description: "Navigate to a URL in the browser. For SPA pages (e.g. luma.com), call wait_for_content after this to ensure React has rendered.",
         parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] },
         execute: async (args: Record<string, unknown>) => {
           const result = await executeBrowserCode({
             apiKey, sessionId: sid,
             code: `
               await page.goto(${esc(args.url)}, { waitUntil: 'domcontentloaded', timeout: 30000 });
-              await page.waitForTimeout(4000);
+              await page.waitForTimeout(2000);
+              try {
+                await page.waitForFunction(
+                  () => (document.body.innerText || '').trim().length > 200,
+                  { timeout: 9000 }
+                );
+              } catch (_e) { /* SPA may still be loading — caller should use wait_for_content */ }
+              await page.waitForTimeout(1500);
               var _title = await page.title();
               _title;
             `,
           });
           return { title: result.output };
+        },
+      },
+      {
+        name: "wait_for_content",
+        description: "Wait until the page has rendered meaningful text content. Always call this after navigate on SPA pages like luma.com before extract_text or extract_links.",
+        parameters: {
+          type: "object",
+          properties: {
+            minLength: { type: "number", description: "Minimum character count to wait for (default 300)" },
+            timeoutSeconds: { type: "number", description: "Max seconds to wait (default 12)" },
+          },
+        },
+        execute: async (args: Record<string, unknown>) => {
+          const minLen = Math.min(Number(args.minLength) || 300, 2000);
+          const timeoutMs = Math.min(Number(args.timeoutSeconds) || 12, 25) * 1000;
+          const result = await executeBrowserCode({
+            apiKey, sessionId: sid,
+            code: `
+              var _ready = false;
+              try {
+                await page.waitForFunction(
+                  (n) => (document.body.innerText || '').trim().length >= n,
+                  { timeout: ${timeoutMs} },
+                  ${minLen}
+                );
+                _ready = true;
+              } catch (_e) {}
+              var _len = (document.body.innerText || '').trim().length;
+              JSON.stringify({ ready: _ready, contentLength: _len });
+            `,
+          });
+          return { status: result.output };
         },
       },
       {
@@ -150,30 +189,52 @@ export async function createBrowserToolsWithSession(opts: {
       },
       {
         name: "extract_text",
-        description: "Extract visible text from the current page",
+        description: "Extract visible text from the current page. If content is empty (SPA not rendered), call wait_for_content first.",
         parameters: { type: "object", properties: { maxLength: { type: "number" } } },
         execute: async (args: Record<string, unknown>) => {
           const maxLen = Math.min(Number(args.maxLength) || 5000, 8000);
           const result = await executeBrowserCode({
             apiKey, sessionId: sid,
-            code: `var _text = await page.evaluate(() => document.body.innerText); _text.substring(0, ${maxLen});`,
+            code: `
+              var _getText = async () => {
+                var t = await page.evaluate(() => {
+                  var body = document.body.innerText || '';
+                  if (body.trim().length > 100) return body;
+                  // Fallback: try common SPA root containers
+                  var root = document.querySelector('main, [role="main"], #__next, #root, #app, .content');
+                  return (root && root.innerText) ? root.innerText : body;
+                });
+                return t;
+              };
+              var _text = await _getText();
+              // If still near-empty, wait for SPA to render and retry once
+              if (!_text || _text.trim().length < 150) {
+                await page.waitForTimeout(4000);
+                _text = await _getText();
+              }
+              _text.substring(0, ${maxLen});
+            `,
           });
           return { text: result.output };
         },
       },
       {
         name: "extract_links",
-        description: "Extract all links from the current page, optionally filtered by keyword. Useful for finding event URLs.",
+        description: "Extract all links from the current page, optionally filtered by keyword. Useful for finding event URLs on luma.com.",
         parameters: { type: "object", properties: { filter: { type: "string", description: "Optional keyword to filter links" } } },
         execute: async (args: Record<string, unknown>) => {
           const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `
             var _links = await page.evaluate((filterStr) => {
               const all = Array.from(document.querySelectorAll('a[href]'));
               return all
-                .map(a => ({ href: a.href, text: (a.textContent || '').trim().substring(0, 120) }))
-                .filter(l => l.text.length > 0)
+                .map(a => ({
+                  href: a.href,
+                  text: (a.textContent || a.getAttribute('aria-label') || '').trim().substring(0, 120)
+                }))
+                .filter(l => l.href && l.href.startsWith('http'))
                 .filter(l => !filterStr || l.href.toLowerCase().includes(filterStr.toLowerCase()) || l.text.toLowerCase().includes(filterStr.toLowerCase()))
-                .slice(0, 60);
+                .filter((l, i, arr) => arr.findIndex(x => x.href === l.href) === i) // deduplicate
+                .slice(0, 80);
             }, ${esc(args.filter || "")});
             JSON.stringify(_links);
           ` });
