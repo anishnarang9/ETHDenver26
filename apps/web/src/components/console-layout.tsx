@@ -7,6 +7,7 @@ import { EnforcementPipeline } from "./enforcement-pipeline";
 import { MissionControl } from "./mission-control";
 import { WalletBalances } from "./wallet-balances";
 import { ReplayButton } from "./replay-button";
+import { Monitor, Mail, Shield, Command } from "lucide-react";
 
 const agentWallets = [
   { name: "Planner", address: process.env.NEXT_PUBLIC_PLANNER_ADDRESS || "", color: "#3b82f6" },
@@ -14,6 +15,18 @@ const agentWallets = [
   { name: "Foodie", address: process.env.NEXT_PUBLIC_FOODIE_ADDRESS || "", color: "#f59e0b" },
   { name: "EventBot", address: process.env.NEXT_PUBLIC_EVENTBOT_ADDRESS || "", color: "#ef4444" },
 ].filter((w) => w.address);
+
+const sectionHeaderStyle: React.CSSProperties = {
+  margin: "0 0 8px",
+  fontSize: "0.75rem",
+  fontWeight: 600,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+  display: "flex",
+  alignItems: "center",
+  gap: "6px",
+};
 
 export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
   const { state } = useSSEState();
@@ -32,7 +45,13 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
       </div>
 
       {/* Browser Panels Row */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", padding: "12px 24px" }}>
+      <div style={{ padding: "12px 24px 0" }}>
+        <h2 style={sectionHeaderStyle}>
+          <Monitor size={14} style={{ color: "#38bdf8" }} />
+          Agent Browsers
+        </h2>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", padding: "0 24px 12px" }}>
         <AgentBrowserPanel
           agentId="rider"
           label="Rider"
@@ -57,20 +76,39 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", padding: "0 24px 24px" }}>
         {/* Left: Email + Enforcement */}
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          <EmailThread emails={state.emails} />
-          <EnforcementPipeline steps={state.enforcementSteps} />
+          <div>
+            <h2 style={sectionHeaderStyle}>
+              <Mail size={14} style={{ color: "#818cf8" }} />
+              Email Thread
+            </h2>
+            <EmailThread emails={state.emails} />
+          </div>
+          <div>
+            <h2 style={sectionHeaderStyle}>
+              <Shield size={14} style={{ color: "#f59e0b" }} />
+              Enforcement Pipeline
+            </h2>
+            <EnforcementPipeline steps={state.enforcementSteps} />
+          </div>
         </div>
         {/* Right: Wallet Balances + Mission Control */}
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {agentWallets.length > 0 && <WalletBalances wallets={agentWallets} />}
-          <MissionControl
-            transactions={state.transactions}
-            plannerUrl={plannerUrl}
-            plannerAddress={process.env.NEXT_PUBLIC_PLANNER_ADDRESS}
-            riderAddress={process.env.NEXT_PUBLIC_RIDER_ADDRESS}
-            foodieAddress={process.env.NEXT_PUBLIC_FOODIE_ADDRESS}
-            eventbotAddress={process.env.NEXT_PUBLIC_EVENTBOT_ADDRESS}
-          />
+          <div>
+            <h2 style={sectionHeaderStyle}>
+              <Command size={14} style={{ color: "#3b82f6" }} />
+              Mission Control
+            </h2>
+            <MissionControl
+              transactions={state.transactions}
+              plannerUrl={plannerUrl}
+              agentAddress={process.env.NEXT_PUBLIC_EVENTBOT_ADDRESS}
+              plannerAddress={process.env.NEXT_PUBLIC_PLANNER_ADDRESS}
+              riderAddress={process.env.NEXT_PUBLIC_RIDER_ADDRESS}
+              foodieAddress={process.env.NEXT_PUBLIC_FOODIE_ADDRESS}
+              eventbotAddress={process.env.NEXT_PUBLIC_EVENTBOT_ADDRESS}
+            />
+          </div>
         </div>
       </div>
     </div>

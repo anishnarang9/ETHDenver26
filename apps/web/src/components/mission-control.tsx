@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { TransactionFeed } from "./transaction-feed";
 import { revokePassportOnchain } from "../lib/onchain";
-import { RefreshCw, ShieldAlert, ShieldOff, Plane } from "lucide-react";
+import { RefreshCw, ShieldAlert, ShieldOff, Plane, Pause, AlertTriangle } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface Transaction {
   id: string;
@@ -19,6 +20,7 @@ interface Transaction {
 export interface MissionControlProps {
   transactions: Transaction[];
   plannerUrl: string;
+  agentAddress?: string;
   plannerAddress?: string;
   riderAddress?: string;
   foodieAddress?: string;
@@ -28,12 +30,14 @@ export interface MissionControlProps {
 export function MissionControl({
   transactions,
   plannerUrl,
+  agentAddress,
   plannerAddress,
   riderAddress,
   foodieAddress,
   eventbotAddress,
 }: MissionControlProps) {
   const [actionStatus, setActionStatus] = useState<string>("");
+  const [isPaused, setIsPaused] = useState(false);
 
   const triggerAction = async (action: string) => {
     setActionStatus(`Triggering ${action}...`);
@@ -50,23 +54,48 @@ export function MissionControl({
     }
   };
 
-  const resolvedEventbotAddress =
-    eventbotAddress || process.env.NEXT_PUBLIC_EVENTBOT_ADDRESS || "";
+  const resolvedRevokeAddress =
+    agentAddress ||
+    eventbotAddress ||
+    process.env.NEXT_PUBLIC_EVENTBOT_ADDRESS ||
+    "";
 
   const handleRevoke = async () => {
-    if (!resolvedEventbotAddress) {
-      setActionStatus("Revoke error: no EventBot address configured");
+    if (!resolvedRevokeAddress) {
+      setActionStatus("Revoke error: no agent address configured");
       return;
     }
     setActionStatus("Revoking EventBot passport...");
     try {
       const result = await revokePassportOnchain({
-        agentAddress: resolvedEventbotAddress,
+        agentAddress: resolvedRevokeAddress,
       });
       setActionStatus(`EventBot revoked! Tx: ${result.txHash.slice(0, 12)}...`);
       setTimeout(() => triggerAction("post-revoke-test"), 2000);
     } catch (err) {
       setActionStatus(`Revoke error: ${(err as Error).message}`);
+    }
+  };
+
+  const handlePause = async () => {
+    const nextPaused = !isPaused;
+    setIsPaused(nextPaused);
+    setActionStatus(nextPaused ? "Pausing all agents..." : "Resuming all agents...");
+    try {
+      const res = await fetch(`${plannerUrl}/api/trigger`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: nextPaused ? "pause-all" : "resume-all" }),
+      });
+      const data = await res.json();
+      setActionStatus(
+        nextPaused
+          ? `Paused (run: ${data.runId?.slice(0, 8)})`
+          : `Resumed (run: ${data.runId?.slice(0, 8)})`
+      );
+    } catch (err) {
+      setIsPaused(!nextPaused);
+      setActionStatus(`Error: ${(err as Error).message}`);
     }
   };
 
@@ -88,18 +117,39 @@ export function MissionControl({
           style={{ padding: "10px", borderRadius: "8px", border: "none", background: "#f59e0b", color: "#fff", fontWeight: 600, fontSize: "0.78rem", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
           <ShieldAlert size={14} /> Scope Violation
         </button>
-        <button onClick={handleRevoke}
-          disabled={!resolvedEventbotAddress}
-          style={{ padding: "10px", borderRadius: "8px", border: "none", background: resolvedEventbotAddress ? "#ef4444" : "#7f1d1d", color: "#fff", fontWeight: 600, fontSize: "0.78rem", cursor: resolvedEventbotAddress ? "pointer" : "not-allowed", opacity: resolvedEventbotAddress ? 1 : 0.6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
-          <ShieldOff size={14} /> Revoke EventBot
+        <div style={{ position: "relative" }}>
+          <button onClick={handleRevoke}
+            disabled={!resolvedRevokeAddress}
+            title={resolvedRevokeAddress ? `Revoke passport for ${resolvedRevokeAddress.slice(0, 6)}...${resolvedRevokeAddress.slice(-4)}` : "No agent address configured -- set agentAddress prop or NEXT_PUBLIC_EVENTBOT_ADDRESS env var"}
+            style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "none", background: resolvedRevokeAddress ? "#ef4444" : "#7f1d1d", color: "#fff", fontWeight: 600, fontSize: "0.78rem", cursor: resolvedRevokeAddress ? "pointer" : "not-allowed", opacity: resolvedRevokeAddress ? 1 : 0.6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+            <ShieldOff size={14} /> Revoke EventBot
+          </button>
+          {!resolvedRevokeAddress && (
+            <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "4px", fontSize: "0.62rem", color: "#f59e0b" }}>
+              <AlertTriangle size={10} /> No agent address configured
+            </div>
+          )}
+        </div>
+        <button onClick={handlePause}
+          style={{ padding: "10px", borderRadius: "8px", border: "none", background: isPaused ? "#16a34a" : "#64748b", color: "#fff", fontWeight: 600, fontSize: "0.78rem", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px", gridColumn: "1 / -1" }}>
+          <Pause size={14} /> {isPaused ? "Resume Agents" : "Pause Agents"}
         </button>
       </div>
 
-      {actionStatus && (
-        <div style={{ fontSize: "0.72rem", color: "#94a3b8", padding: "6px 8px", background: "#0f172a", borderRadius: "6px" }}>
-          {actionStatus}
-        </div>
-      )}
+      <AnimatePresence mode="wait">
+        {actionStatus && (
+          <motion.div
+            key={actionStatus}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.2 }}
+            style={{ fontSize: "0.72rem", color: "#94a3b8", padding: "6px 8px", background: "#0f172a", borderRadius: "6px" }}
+          >
+            {actionStatus}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Transaction Feed */}
       <h4 style={{ margin: 0, fontSize: "0.8rem", color: "#64748b" }}>Transactions</h4>

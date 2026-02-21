@@ -1,49 +1,50 @@
 "use client";
 
-import { useState } from "react";
-import { ActionInspector } from "../components/action-inspector";
-import { PassportEditor } from "../components/passport-editor";
-import { TimelinePanel } from "../components/timeline-panel";
-import { WalletConnector } from "../components/wallet-connector";
+import { SetupWizard } from "../components/setup-wizard";
 
 export default function HomePage() {
-  const [ownerAddress, setOwnerAddress] = useState<string>("");
-  const [agentAddress, setAgentAddress] = useState<string>("");
-  const [lastAction, setLastAction] = useState<string>("No recent actions");
-
   return (
-    <main>
-      <div className="topbar">
-        <div>
-          <h1 style={{ margin: 0 }}>Agent Passport + Policy Vault + x402 Gateway</h1>
-          <div className="meta">Kite testnet implementation dashboard</div>
-        </div>
-        <span className="badge">Balanced MVP + DX</span>
+    <main
+      style={{
+        minHeight: "100vh",
+        background: "#0a0a0f",
+        color: "#e2e8f0",
+        fontFamily: "'Inter', sans-serif",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        padding: "48px 24px",
+      }}
+    >
+      {/* Header */}
+      <div style={{ textAlign: "center", marginBottom: 40 }}>
+        <h1
+          style={{
+            margin: 0,
+            fontSize: "2.4rem",
+            fontWeight: 800,
+            background: "linear-gradient(135deg, #38bdf8, #818cf8)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            letterSpacing: "-0.02em",
+          }}
+        >
+          TripDesk
+        </h1>
+        <p
+          style={{
+            margin: "8px 0 0",
+            fontSize: "1rem",
+            color: "#64748b",
+            fontWeight: 400,
+          }}
+        >
+          AI Travel Agent Console
+        </p>
       </div>
 
-      <div className="grid">
-        <div className="card-list">
-          <WalletConnector onConnected={setOwnerAddress} />
-          <PassportEditor
-            ownerAddress={ownerAddress}
-            onAgentChanged={setAgentAddress}
-            onAction={(message) => setLastAction(message)}
-          />
-          <ActionInspector agentAddress={agentAddress} />
-        </div>
-        <div className="card-list">
-          <div className="panel">
-            <h2>Current Demo State</h2>
-            <div className="meta">Owner: {ownerAddress || "not connected"}</div>
-            <div className="meta">Agent: {agentAddress || "not set"}</div>
-            <div className="status">Last action: {lastAction}</div>
-            <div style={{ marginTop: 10 }}>
-              <span className={agentAddress ? "badge" : "badge warn"}>{agentAddress ? "Passport Target Set" : "Awaiting Agent"}</span>
-            </div>
-          </div>
-          <TimelinePanel agentAddress={agentAddress} />
-        </div>
-      </div>
+      {/* Setup Wizard */}
+      <SetupWizard />
     </main>
   );
 }
