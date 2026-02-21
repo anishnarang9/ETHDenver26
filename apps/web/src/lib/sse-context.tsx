@@ -93,6 +93,8 @@ export interface SSEState {
   agentResults: AgentResult[];
   synthesisBody?: string;
   currentRunId?: string;
+  // The human email that triggered the current run
+  incomingEmail?: { from: string; subject: string; body: string };
   // Graph state
   agentNodes: AgentNode[];
   emailEdges: EmailEdge[];
@@ -151,7 +153,32 @@ function findAgentByInbox(state: SSEState, address: string): string | undefined 
 
 function sseReducer(state: SSEState, action: SSEAction): SSEState {
   switch (action.type) {
-    case "EMAIL_RECEIVED":
+    case "EMAIL_RECEIVED": {
+      const p = action.payload.payload;
+      // email_received with agentId "planner" = the human trigger email
+      if (action.payload.agentId === "planner") {
+        return {
+          ...state,
+          incomingEmail: {
+            from: (p.from as string) || "",
+            subject: (p.subject as string) || "",
+            body: (p.body as string) || "",
+          },
+        };
+      }
+      return {
+        ...state,
+        emails: [...state.emails, {
+          id: "email-" + Date.now() + "-" + Math.random(),
+          from: (p.from as string) || action.payload.agentId,
+          to: p.to as string,
+          subject: (p.subject as string) || "",
+          body: (p.body as string) || "",
+          timestamp: new Date().toISOString(),
+          agentId: action.payload.agentId,
+        }],
+      };
+    }
     case "EMAIL_SENT": {
       const p = action.payload.payload;
       return {

@@ -350,12 +350,20 @@ export async function runEmailChainTripPlan(opts: {
         ? "## Communication Protocol (Trip Compiler)\n" +
           "You are the trip COMPILER. Research agents will email you their findings.\n" +
           "1. Create an initial day-by-day skeleton itinerary from the trip request.\n" +
+          "   If the request is vague or missing details, DO NOT ask for clarification.\n" +
+          "   Instead, immediately apply these defaults and proceed:\n" +
+          "   - Trip: 3-day weekend (Fri-Sun) to Denver, Colorado\n" +
+          "   - Travelers: 2 adults, midrange budget ($200-$300/night lodging)\n" +
+          "   - Lodging: downtown/LoDo hotel, no rental car (transit + rideshare)\n" +
+          "   - Interests: food + breweries, light hiking, 1-2 museums\n" +
           "2. Call check_inbox to collect research from other agents.\n" +
           "3. If no data yet, do another check_inbox after a moment. Repeat up to 4 times.\n" +
           "4. Incorporate whatever research data you receive into the itinerary.\n" +
           "5. Email the COMPLETE compiled itinerary to the orchestrator at: " + emailTo + "\n" +
           "6. Call report_results as backup.\n\n" +
-          "IMPORTANT: Do NOT email research agents asking for info — they will send you data on their own.\n" +
+          "CRITICAL: Do NOT email the human requester — you are a backend compiler, not a customer-facing agent.\n" +
+          "CRITICAL: Do NOT email research agents asking for info — they will send you data on their own.\n" +
+          "CRITICAL: Do NOT ask anyone for clarification. Always proceed with defaults if details are missing.\n" +
           "If you receive emails from researchers, incorporate their data. Do NOT reply with questions.\n" +
           "Focus on COMPILING, not coordinating. Use your iterations for inbox checks and compilation.\n"
         : "## Communication Protocol (Research Agent)\n" +
@@ -569,11 +577,13 @@ export async function runEmailChainTripPlan(opts: {
     "- \"itinerary-planner\" (SPAWN FIRST): The trip compiler.\n" +
     "  No browser needed. It passively receives research findings via email and compiles them.\n" +
     "  Its systemPrompt should say: 'You are a trip itinerary compiler. Create an initial day-by-day\n" +
-    "  skeleton from the trip request. Then check your inbox repeatedly to collect research findings\n" +
-    "  from ride, restaurant, and event researchers. Compile all data into a polished itinerary.\n" +
-    "  Do NOT email research agents — they will send you data automatically.\n" +
-    "  Email the orchestrator with the complete compiled itinerary when done.'\n" +
+    "  skeleton from the trip request. If details are missing or vague, use defaults immediately\n" +
+    "  (3-day Denver weekend, 2 adults, midrange) — do NOT ask the human for clarification.\n" +
+    "  Do NOT email the human requester. Do NOT email research agents.\n" +
+    "  Check your inbox repeatedly for research findings, compile them into a polished itinerary,\n" +
+    "  then email the orchestrator with the complete compiled itinerary when done.'\n" +
     "  IMPORTANT: Do NOT give itinerary-planner any collaborateWith — it only RECEIVES emails.\n" +
+    "  IMPORTANT: Do NOT include the human's email address in the itinerary-planner's task.\n" +
     "- \"ride-researcher\": Searches for rides/transport (needs browser)\n" +
     "- \"restaurant-scout\": Finds restaurants (needs browser)\n" +
     "- \"event-finder\": Discovers and registers for events on luma (needs browser)\n" +
