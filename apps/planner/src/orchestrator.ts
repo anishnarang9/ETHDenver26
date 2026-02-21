@@ -11,6 +11,12 @@ import {
 import type { PlannerEnv } from "./config.js";
 import { createWeatherTool } from "./tools/weather.js";
 import { createAgentEmailTools, createOrchestratorEmailTools } from "./tools/email.js";
+import {
+  createHireRiderTool,
+  createHireFoodieTool,
+  createHireEventBotTool,
+  type HireContext,
+} from "./tools/hire.js";
 
 /* ------------------------------------------------------------------ */
 /*  InboxPool: manages dynamic inboxes within AgentMail's 10-limit    */
@@ -66,6 +72,25 @@ class InboxPool {
   getAddress(agentId: string): string | undefined {
     return this.allocated.get(agentId);
   }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Specialist tool resolver                                           */
+/* ------------------------------------------------------------------ */
+
+function getSpecialistTool(
+  role: string,
+  ctx: HireContext,
+  config: PlannerEnv,
+): AgentTool | null {
+  if (!config.RIDER_URL && !config.FOODIE_URL && !config.EVENTBOT_URL) return null;
+  if ((role.includes("ride") || role.includes("transport")) && config.RIDER_URL)
+    return createHireRiderTool(ctx, config.RIDER_URL);
+  if ((role.includes("restaurant") || role.includes("food")) && config.FOODIE_URL)
+    return createHireFoodieTool(ctx, config.FOODIE_URL);
+  if (role.includes("event") && config.EVENTBOT_URL)
+    return createHireEventBotTool(ctx, config.EVENTBOT_URL);
+  return null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -220,6 +245,18 @@ export async function runEmailChainTripPlan(opts: {
           console.warn("[orchestrator] Browser setup failed for " + role + ":", (err as Error).message);
         }
       }
+
+      // Add specialist hire tool if a matching specialist service is configured
+      const hireCtx: HireContext = {
+        provider,
+        agentWallet: spawned.wallet as unknown as Wallet,
+        sessionWallet: spawned.wallet as unknown as Wallet, // agent is its own session key
+        paymentWallet,
+        paymentAsset: opts.config.PAYMENT_ASSET,
+        sseHub: opts.sseHub,
+      };
+      const specialistTool = getSpecialistTool(role, hireCtx, opts.config);
+      if (specialistTool) agentTools.push(specialistTool);
 
       let reportedResult = "";
       agentTools.push({
@@ -399,11 +436,19 @@ export async function runEmailChainTripPlan(opts: {
   /*  Coordinator loop                                                 */
   /* ---------------------------------------------------------------- */
 
-  opts.sseHub.emit({
-    type: "orchestrator_phase",
-    agentId: "planner",
-    payload: { phase: "coordinating", message: "Analyzing request and coordinating agents..." },
-  });
+  // Track which phases we've emitted to avoid duplicates
+  const emittedPhases = new Set<string>();
+  const emitPhase = (phase: string, message: string) => {
+    if (emittedPhases.has(phase)) return;
+    emittedPhases.add(phase);
+    opts.sseHub.emit({
+      type: "orchestrator_phase",
+      agentId: "planner",
+      payload: { phase, message },
+    });
+  };
+
+  emitPhase("planning", "Analyzing request and planning agent team...");
 
   const orchestratorSystemPrompt =
     "You are TripDesk Orchestrator -- a coordinator that spawns specialist agents who communicate via email.\n\n" +
@@ -450,12 +495,31 @@ export async function runEmailChainTripPlan(opts: {
         agentId: "planner",
         payload: { tool: name, args },
       });
+
+      // Emit phase transitions based on tool calls
       if (name === "spawn_agent") {
+        emitPhase("spawning", "Spawning agents with on-chain identities...");
         opts.sseHub.emit({
           type: "orchestrator_decision",
           agentId: "planner",
           payload: { decision: "spawning", role: (args as Record<string, unknown>).role },
         });
+      } else if (name === "wait_for_agents") {
+        emitPhase("executing", "Agents executing tasks in parallel...");
+      } else if (name === "check_orchestrator_inbox" || name === "email_human") {
+        emitPhase("synthesizing", "Compiling agent results into final itinerary...");
+      }
+
+      // Capture synthesisBody when emailing the human
+      if (name === "email_human") {
+        const emailArgs = args as Record<string, unknown>;
+        if (emailArgs.body) {
+          opts.sseHub.emit({
+            type: "agent_results",
+            agentId: "planner",
+            payload: { results: [], synthesisBody: emailArgs.body as string },
+          });
+        }
       }
     },
     apiKey: opts.config.OPENAI_API_KEY,
