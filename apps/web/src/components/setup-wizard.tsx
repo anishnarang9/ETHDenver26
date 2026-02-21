@@ -889,23 +889,42 @@ export function SetupWizard() {
         <span style={{ fontSize: "0.78rem", color: COLORS.textDim }}>
           {completedCount} of {steps.length} steps complete
         </span>
-        {allComplete && (
-          <motion.span
-            initial={{ opacity: 0, x: 10 }}
-            animate={{ opacity: 1, x: 0 }}
-            style={{
-              fontSize: "0.72rem",
-              color: COLORS.success,
-              fontWeight: 600,
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-            }}
-          >
-            <CheckCircle2 size={12} />
-            Ready
-          </motion.span>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {allComplete && (
+            <motion.span
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              style={{
+                fontSize: "0.72rem",
+                color: COLORS.success,
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <CheckCircle2 size={12} />
+              Ready
+            </motion.span>
+          )}
+          {!allComplete && (
+            <button
+              onClick={() => router.push("/console")}
+              style={{
+                padding: "4px 12px",
+                borderRadius: 6,
+                border: `1px solid ${COLORS.border}`,
+                background: "transparent",
+                color: COLORS.textDim,
+                fontSize: "0.7rem",
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              Skip to Console →
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Steps */}
