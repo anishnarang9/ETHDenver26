@@ -1,6 +1,6 @@
 <div align="center">
 
-# <img src="https://img.shields.io/badge/-%F0%9F%9B%A9%EF%B8%8F-black?style=for-the-badge" height="30" /> TripDesk
+# <img src="https://img.shields.io/badge/-%F0%9F%9B%A9%EF%B8%8F-black?style=for-the-badge" height="30" /> Actuate
 
 ### LLM-Powered Multi-Agent Travel Concierge on Kite
 
@@ -43,7 +43,7 @@ AI agents are becoming autonomous economic actors, but there's no standard way t
 
 ## Our Solution
 
-TripDesk is a **multi-agent travel concierge** where a team of AI agents collaboratively plan trips. Each agent has an **on-chain passport** defining its spending limits, allowed scopes, and services. Agents **hire each other** using the **x402 payment protocol** -- gateway transactions are settled on Kite and logged on-chain, while specialist services keep in-memory verification for fast demos.
+Actuate is a **multi-agent travel concierge** where a team of AI agents collaboratively plan trips. Each agent has an **on-chain passport** defining its spending limits, allowed scopes, and services. Agents **hire each other** using the **x402 payment protocol** -- gateway transactions are settled on Kite and logged on-chain, while specialist services keep in-memory verification for fast demos.
 
 An owner can **revoke any agent's passport** in real-time, instantly cutting off access. A live dashboard shows every decision, payment, and enforcement step as it happens.
 
