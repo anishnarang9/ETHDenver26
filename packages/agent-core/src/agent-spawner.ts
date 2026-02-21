@@ -101,7 +101,7 @@ export class AgentSpawner {
 
       // Step 2: Deploy passport via deployer key (NonceManager handles parallel txs)
       const passportContract = new Contract(this.passportRegistry, PASSPORT_ABI, this.nonceManager);
-      const expiresAt = Math.floor(Date.now() / 1000) + 86400; // 24 hours
+      const expiresAt = Math.floor(Date.now() / 1000) + 86400 * 30; // 30 days
       const scopes = opts.scopes.map((s) => ethers.id(s));
       const services = (opts.services ?? ["gateway", "planner"]).map((s) => ethers.id(s));
 

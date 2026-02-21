@@ -272,7 +272,7 @@ export function SetupWizard() {
       try {
         const result = await upsertPassportOnchain({
           agentAddress: wallet.address,
-          expiresAt: Math.floor(Date.now() / 1000) + 86400,
+          expiresAt: Math.floor(Date.now() / 1000) + 86400 * 30, // 30 days
           perCallCap: "1000000000000000000",
           dailyCap: "10000000000000000000",
           rateLimitPerMin: 30,
@@ -328,7 +328,7 @@ export function SetupWizard() {
         const result = await grantSessionOnchain({
           agentAddress: wallet.address,
           sessionAddress: wallet.address,
-          expiresAt: Math.floor(Date.now() / 1000) + 86400,
+          expiresAt: Math.floor(Date.now() / 1000) + 86400 * 30, // 30 days
           scopes: ["travel", "booking", "search"],
         });
         seen.set(addr, result.txHash);
