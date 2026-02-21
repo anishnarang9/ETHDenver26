@@ -210,6 +210,10 @@ export async function runEmailChainTripPlan(opts: {
           items: { type: "string" },
           description: "Optional: list of agent roles this agent should coordinate with via email",
         },
+        maxIterations: {
+          type: "number",
+          description: "Max LLM iterations for this agent (default 12). Use 15+ for compiler/coordinator agents that wait for data.",
+        },
       },
       required: ["role", "systemPrompt", "task", "needsBrowser", "scopes"],
     },
@@ -221,6 +225,7 @@ export async function runEmailChainTripPlan(opts: {
       const scopes = args.scopes as string[];
       const emailTo = (args.emailTo as string) || plannerInboxAddress || "";
       const collaborateWith = (args.collaborateWith as string[]) || [];
+      const maxIterations = (args.maxIterations as number) || 12;
 
       if (opts.signal?.aborted) throw new Error("Agent killed");
 
@@ -339,23 +344,39 @@ export async function runEmailChainTripPlan(opts: {
           "Do NOT try to call navigate, extract_text, or other browser tools — they don't exist.\n"
         : "";
 
+      const isCompiler = role.includes("itinerary") || role.includes("planner");
+
+      const communicationProtocol = isCompiler
+        ? "## Communication Protocol (Trip Compiler)\n" +
+          "You are the trip COMPILER. Research agents will email you their findings.\n" +
+          "1. Create an initial day-by-day skeleton itinerary from the trip request.\n" +
+          "2. Call check_inbox to collect research from other agents.\n" +
+          "3. If no data yet, do another check_inbox after a moment. Repeat up to 4 times.\n" +
+          "4. Incorporate whatever research data you receive into the itinerary.\n" +
+          "5. Email the COMPLETE compiled itinerary to the orchestrator at: " + emailTo + "\n" +
+          "6. Call report_results as backup.\n\n" +
+          "IMPORTANT: Do NOT email research agents asking for info — they will send you data on their own.\n" +
+          "If you receive emails from researchers, incorporate their data. Do NOT reply with questions.\n" +
+          "Focus on COMPILING, not coordinating. Use your iterations for inbox checks and compilation.\n"
+        : "## Communication Protocol (Research Agent)\n" +
+          "You have all the trip details in your task description — start researching IMMEDIATELY.\n" +
+          "1. Do your research using your tools (browser, hire, etc.). This is your PRIMARY task.\n" +
+          "2. Spend most of your iterations on research, not on emails.\n" +
+          "3. When you have findings, email them to each collaborator listed below.\n" +
+          "4. Email your findings to the orchestrator at: " + emailTo + "\n" +
+          "5. Call report_results as backup.\n\n" +
+          "IMPORTANT: Do NOT email the itinerary-planner asking for trip details — you already have them.\n" +
+          "Do NOT wait for replies. Just research, send your findings, and finish.\n";
+
       const fullSystemPrompt = systemPrompt + "\n\n" +
         "## Agent Email Directory\n" +
         "You have a real email inbox at: " + (inboxAddress || "not available") + "\n" +
         "The following agents are available to email:\n" +
         buildDirectoryString() + "\n\n" +
         browserFallback +
-        "## MANDATORY Communication Protocol\n" +
-        "1. FIRST: Call check_inbox — other agents may have already sent you data.\n" +
-        "2. Do your research using your tools (browser, hire, etc.).\n" +
-        "3. REQUIRED: For each agent in your collaboration list below, call send_email\n" +
-        "   with your findings so they can use your data. This is NOT optional.\n" +
-        "4. Call check_inbox again — read and incorporate any data from collaborators.\n" +
-        "5. Email your FINAL compiled results to the orchestrator at: " + emailTo + "\n" +
-        "6. Call report_results as backup.\n\n" +
-        "You MUST send at least one email to each collaborator before finishing.\n" +
+        communicationProtocol +
         (collabAddresses.length > 0
-          ? "\n## Your Collaborators (MUST email each one)\n" +
+          ? "\n## Your Collaborators (MUST email findings to each one)\n" +
             collabAddresses.map((c) => "- " + c).join("\n") + "\n"
           : "") +
         "\nIMPORTANT: Be thorough but efficient. You have a limited number of iterations.";
@@ -386,7 +407,7 @@ export async function runEmailChainTripPlan(opts: {
               emitEnforcement(6, "Quote", `Tool call: ${name}`);
             },
             apiKey: opts.config.OPENAI_API_KEY,
-            maxIterations: 12,
+            maxIterations,
             signal: opts.signal,
           });
 
@@ -534,21 +555,25 @@ export async function runEmailChainTripPlan(opts: {
     "You are TripDesk Orchestrator -- a coordinator that spawns specialist agents who communicate via email.\n\n" +
     "## Your workflow (FOLLOW THIS EXACT ORDER):\n" +
     "1. Call get_weather to check weather at the destination.\n" +
-    "2. FIRST, spawn an \"itinerary-planner\" agent. This agent plans the overall trip structure,\n" +
-    "   creates a day-by-day skeleton itinerary, and coordinates the research agents.\n" +
+    "2. FIRST, spawn an \"itinerary-planner\" agent — the trip compiler.\n" +
     "   It does NOT need a browser. Give it the full trip request details.\n" +
-    "3. THEN spawn 2-3 research agents (ride-researcher, restaurant-scout, event-finder)\n" +
-    "   that do the actual searching. They all collaborateWith the itinerary-planner.\n" +
+    "   It will wait for research data from other agents and compile the final itinerary.\n" +
+    "   Give it maxIterations: 18 so it has time to wait for research data.\n" +
+    "3. THEN spawn 2-3 research agents (ride-researcher, restaurant-scout, event-finder).\n" +
+    "   CRITICAL: Include the FULL trip details (dates, destination, preferences, etc.) in each\n" +
+    "   research agent's task so they are completely self-sufficient and do NOT need to ask anyone.\n" +
     "4. Call wait_for_agents to wait for them to finish.\n" +
     "5. Call check_orchestrator_inbox to read their emailed reports.\n" +
     "6. Compile the results and call email_human to send the final itinerary to the requester.\n\n" +
     "## Agent types you can spawn:\n" +
-    "- \"itinerary-planner\" (SPAWN FIRST): Plans the overall trip structure and day-by-day schedule.\n" +
-    "  No browser needed. Receives research from other agents via email and compiles the itinerary.\n" +
-    "  Its systemPrompt should say: 'You are a trip itinerary planner. Create a detailed day-by-day\n" +
-    "  schedule based on the trip request. Email the other research agents to request specific info.\n" +
-    "  Wait for their replies via check_inbox, then compile everything into a final itinerary.\n" +
-    "  Email the orchestrator with the complete itinerary when done.'\n" +
+    "- \"itinerary-planner\" (SPAWN FIRST): The trip compiler.\n" +
+    "  No browser needed. It passively receives research findings via email and compiles them.\n" +
+    "  Its systemPrompt should say: 'You are a trip itinerary compiler. Create an initial day-by-day\n" +
+    "  skeleton from the trip request. Then check your inbox repeatedly to collect research findings\n" +
+    "  from ride, restaurant, and event researchers. Compile all data into a polished itinerary.\n" +
+    "  Do NOT email research agents — they will send you data automatically.\n" +
+    "  Email the orchestrator with the complete compiled itinerary when done.'\n" +
+    "  IMPORTANT: Do NOT give itinerary-planner any collaborateWith — it only RECEIVES emails.\n" +
     "- \"ride-researcher\": Searches for rides/transport (needs browser)\n" +
     "- \"restaurant-scout\": Finds restaurants (needs browser)\n" +
     "- \"event-finder\": Discovers and registers for events on luma (needs browser)\n" +
@@ -561,22 +586,23 @@ export async function runEmailChainTripPlan(opts: {
     "   For events that look relevant, try to REGISTER by clicking the register/RSVP button.\n" +
     "   Focus on AI agent, DeFi, and blockchain infrastructure side events.'\n\n" +
     "## CRITICAL: Spawn order and collaboration\n" +
-    "1. Spawn itinerary-planner FIRST (it plans the trip and coordinates everyone).\n" +
-    "2. Then spawn research agents. Each research agent must collaborateWith: [\"itinerary-planner\"].\n" +
-    "3. itinerary-planner must collaborateWith ALL research agents.\n" +
+    "1. Spawn itinerary-planner FIRST with NO collaborateWith and maxIterations: 18.\n" +
+    "   It passively collects data from researchers.\n" +
+    "2. Then spawn research agents. Each must collaborateWith: [\"itinerary-planner\"].\n" +
+    "   They will email their findings to the planner when done.\n" +
+    "3. Research agents are SELF-SUFFICIENT — include full trip details in each agent's task.\n" +
     "Example spawn order:\n" +
-    "  1st: itinerary-planner → collaborateWith: [\"ride-researcher\", \"restaurant-scout\", \"event-finder\"]\n" +
+    "  1st: itinerary-planner → collaborateWith: [] (receives only), maxIterations: 18\n" +
     "  2nd: ride-researcher → collaborateWith: [\"itinerary-planner\"]\n" +
     "  3rd: restaurant-scout → collaborateWith: [\"itinerary-planner\"]\n" +
     "  4th: event-finder → collaborateWith: [\"itinerary-planner\"]\n\n" +
-    "## Agent Communication:\n" +
-    "- Each agent gets its own email inbox and MUST send emails to collaborators.\n" +
-    "- The itinerary-planner is the hub — it emails research agents with specific requests\n" +
-    "  and they email back their findings.\n" +
-    "- After spawning all agents, they work autonomously via email.\n" +
-    "- The agent directory is shared so they know each other's addresses.\n\n" +
+    "## Communication flow (ONE-DIRECTIONAL):\n" +
+    "  Research agents → email findings → itinerary-planner → email compiled itinerary → orchestrator\n" +
+    "  Research agents do NOT ask the planner for info. The planner does NOT email research agents.\n" +
+    "  Each research agent gets the full trip details in its task and works independently.\n\n" +
     "## Important:\n" +
-    "- ALWAYS spawn itinerary-planner first. It is the brain of the trip.\n" +
+    "- ALWAYS spawn itinerary-planner first.\n" +
+    "- ALWAYS include full trip details (dates, destination, preferences) in EVERY research agent's task.\n" +
     "- After waiting, ALWAYS check your inbox for the itinerary-planner's compiled report.\n" +
     "- The final email_human should forward the itinerary-planner's compiled itinerary to the human.";
 
