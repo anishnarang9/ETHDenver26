@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { TransactionFeed } from "./transaction-feed";
 import { revokePassportOnchain } from "../lib/onchain";
+import { RefreshCw, ShieldAlert, ShieldOff, Plane } from "lucide-react";
 
 interface Transaction {
   id: string;
@@ -15,10 +16,23 @@ interface Transaction {
   timestamp: string;
 }
 
-export function MissionControl({ transactions, plannerUrl }: {
+export interface MissionControlProps {
   transactions: Transaction[];
   plannerUrl: string;
-}) {
+  plannerAddress?: string;
+  riderAddress?: string;
+  foodieAddress?: string;
+  eventbotAddress?: string;
+}
+
+export function MissionControl({
+  transactions,
+  plannerUrl,
+  plannerAddress,
+  riderAddress,
+  foodieAddress,
+  eventbotAddress,
+}: MissionControlProps) {
   const [actionStatus, setActionStatus] = useState<string>("");
 
   const triggerAction = async (action: string) => {
@@ -36,10 +50,19 @@ export function MissionControl({ transactions, plannerUrl }: {
     }
   };
 
+  const resolvedEventbotAddress =
+    eventbotAddress || process.env.NEXT_PUBLIC_EVENTBOT_ADDRESS || "";
+
   const handleRevoke = async () => {
+    if (!resolvedEventbotAddress) {
+      setActionStatus("Revoke error: no EventBot address configured");
+      return;
+    }
     setActionStatus("Revoking EventBot passport...");
     try {
-      const result = await revokePassportOnchain({ agentAddress: "" }); // Needs real address
+      const result = await revokePassportOnchain({
+        agentAddress: resolvedEventbotAddress,
+      });
       setActionStatus(`EventBot revoked! Tx: ${result.txHash.slice(0, 12)}...`);
       setTimeout(() => triggerAction("post-revoke-test"), 2000);
     } catch (err) {
@@ -54,20 +77,21 @@ export function MissionControl({ transactions, plannerUrl }: {
       {/* Action Buttons */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
         <button onClick={() => triggerAction("plan-trip")}
-          style={{ padding: "10px", borderRadius: "8px", border: "none", background: "#3b82f6", color: "#fff", fontWeight: 600, fontSize: "0.78rem", cursor: "pointer" }}>
-          Plan Trip
+          style={{ padding: "10px", borderRadius: "8px", border: "none", background: "#3b82f6", color: "#fff", fontWeight: 600, fontSize: "0.78rem", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+          <Plane size={14} /> Plan Trip
         </button>
         <button onClick={() => triggerAction("additional-search")}
-          style={{ padding: "10px", borderRadius: "8px", border: "none", background: "#8b5cf6", color: "#fff", fontWeight: 600, fontSize: "0.78rem", cursor: "pointer" }}>
-          Additional Search
+          style={{ padding: "10px", borderRadius: "8px", border: "none", background: "#8b5cf6", color: "#fff", fontWeight: 600, fontSize: "0.78rem", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+          <RefreshCw size={14} /> Additional Search
         </button>
         <button onClick={() => triggerAction("scope-violation")}
-          style={{ padding: "10px", borderRadius: "8px", border: "none", background: "#f59e0b", color: "#fff", fontWeight: 600, fontSize: "0.78rem", cursor: "pointer" }}>
-          Scope Violation
+          style={{ padding: "10px", borderRadius: "8px", border: "none", background: "#f59e0b", color: "#fff", fontWeight: 600, fontSize: "0.78rem", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+          <ShieldAlert size={14} /> Scope Violation
         </button>
         <button onClick={handleRevoke}
-          style={{ padding: "10px", borderRadius: "8px", border: "none", background: "#ef4444", color: "#fff", fontWeight: 600, fontSize: "0.78rem", cursor: "pointer" }}>
-          Revoke EventBot
+          disabled={!resolvedEventbotAddress}
+          style={{ padding: "10px", borderRadius: "8px", border: "none", background: resolvedEventbotAddress ? "#ef4444" : "#7f1d1d", color: "#fff", fontWeight: 600, fontSize: "0.78rem", cursor: resolvedEventbotAddress ? "pointer" : "not-allowed", opacity: resolvedEventbotAddress ? 1 : 0.6, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+          <ShieldOff size={14} /> Revoke EventBot
         </button>
       </div>
 
