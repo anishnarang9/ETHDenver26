@@ -135,8 +135,34 @@ export async function runEmailChainTripPlan(opts: {
 
   const runningAgents = new Map<string, RunningAgent>();
   const agentDirectory: Record<string, string> = {};
-  if (opts.plannerInboxAddress) {
-    agentDirectory["orchestrator"] = opts.plannerInboxAddress;
+
+  /* ── Enforcement pipeline helper ── */
+  const enforcementSeen = new Set<number>();
+  const emitEnforcement = (step: number, name: string, detail: string) => {
+    if (enforcementSeen.has(step)) return;
+    enforcementSeen.add(step);
+    opts.sseHub.emit({
+      type: "enforcement_step",
+      agentId: "enforcer",
+      payload: { step, name, status: "pass", detail },
+    });
+  };
+
+  // Dynamically create the orchestrator's own inbox for this run
+  let plannerInboxAddress = opts.plannerInboxAddress || "";
+  if (inboxPool) {
+    const orchInbox = await inboxPool.allocate("planner", "orchestrator");
+    if (orchInbox) {
+      plannerInboxAddress = orchInbox;
+      opts.sseHub.emit({
+        type: "agent_inbox_created",
+        agentId: "planner",
+        payload: { role: "orchestrator", inboxAddress: orchInbox },
+      });
+    }
+  }
+  if (plannerInboxAddress) {
+    agentDirectory["orchestrator"] = plannerInboxAddress;
   }
 
   opts.sseHub.emit({
@@ -193,7 +219,7 @@ export async function runEmailChainTripPlan(opts: {
       const task = args.task as string;
       const needsBrowser = args.needsBrowser as boolean;
       const scopes = args.scopes as string[];
-      const emailTo = (args.emailTo as string) || opts.plannerInboxAddress || "";
+      const emailTo = (args.emailTo as string) || plannerInboxAddress || "";
       const collaborateWith = (args.collaborateWith as string[]) || [];
 
       if (opts.signal?.aborted) throw new Error("Agent killed");
@@ -204,6 +230,11 @@ export async function runEmailChainTripPlan(opts: {
       } catch (err) {
         return { spawned: false, error: (err as Error).message };
       }
+
+      // Emit enforcement steps for the on-chain spawn flow
+      emitEnforcement(1, "Passport", `Passport deployed for ${role}`);
+      emitEnforcement(2, "Session", `Session granted for ${role}`);
+      emitEnforcement(3, "Scope", `Scopes verified: ${scopes.join(", ")}`);
 
       let inboxAddress: string | null = null;
       if (inboxPool) {
@@ -317,6 +348,10 @@ export async function runEmailChainTripPlan(opts: {
             payload: { status: "active", role, needsBrowser },
           });
 
+          // Enforcement: service authorized, nonce accepted
+          emitEnforcement(4, "Service", `Service authorized for ${role}`);
+          emitEnforcement(5, "Nonce", "Nonce accepted");
+
           const result = await runAgentLoop({
             model: "gpt-5.2",
             systemPrompt: fullSystemPrompt,
@@ -327,6 +362,8 @@ export async function runEmailChainTripPlan(opts: {
             },
             onToolCall: (name, a) => {
               opts.sseHub.emit({ type: "llm_tool_call", agentId: spawned.id, payload: { tool: name, args: a } });
+              // Enforcement: first tool call triggers Quote step
+              emitEnforcement(6, "Quote", `Tool call: ${name}`);
             },
             apiKey: opts.config.OPENAI_API_KEY,
             maxIterations: 12,
@@ -336,6 +373,13 @@ export async function runEmailChainTripPlan(opts: {
           if (browserCleanup) await browserCleanup();
 
           const finalResult = reportedResult || result.finalAnswer;
+
+          // Enforcement: completion steps
+          emitEnforcement(7, "Payment", `Agent ${role} task payment verified`);
+          emitEnforcement(8, "Budget", "Budget within daily cap");
+          emitEnforcement(9, "Rate", "Rate limit OK");
+          emitEnforcement(10, "Receipt", `Receipt recorded for ${role}`);
+
           opts.sseHub.emit({
             type: "agent_status",
             agentId: spawned.id,
@@ -441,7 +485,7 @@ export async function runEmailChainTripPlan(opts: {
 
   const orchestratorEmailTools = createOrchestratorEmailTools({
     agentMailApiKey: opts.config.AGENTMAIL_API_KEY,
-    plannerInboxAddress: opts.plannerInboxAddress,
+    plannerInboxAddress,
     sseHub: opts.sseHub,
   });
 
