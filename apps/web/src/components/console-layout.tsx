@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { useSSEState } from "../lib/sse-context";
 import { AgentNetworkGraph } from "./agent-network-graph";
-import { AgentDetailPanel } from "./agent-detail-panel";
+import { AgentCard } from "./agent-card";
+import { EmailChainView } from "./email-chain-view";
 import { EnforcementPipeline } from "./enforcement-pipeline";
 import { MissionControl } from "./mission-control";
 import { WalletBalances } from "./wallet-balances";
 import { ReplayButton } from "./replay-button";
 import { AnimatePresence, motion } from "framer-motion";
-import { Mail, Shield, Command, Users, OctagonX, Network, ChevronDown } from "lucide-react";
+import { Mail, Shield, Command, Users, OctagonX, Network, ChevronDown, Zap } from "lucide-react";
 
 const plannerWallet = [
   { name: "Planner (Orchestrator)", address: process.env.NEXT_PUBLIC_PLANNER_ADDRESS || "", color: "#3b82f6" },
@@ -55,9 +56,11 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
     }
   };
 
+  const gridCols = agentCount <= 1 ? 1 : agentCount <= 2 ? 2 : 3;
+
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#e2e8f0", fontFamily: "'Inter', sans-serif" }}>
-      {/* Header */}
+      {/* ═══ Header ═══ */}
       <div
         style={{
           display: "flex",
@@ -85,62 +88,38 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
               Email-Chain Agent Network on Kite
             </p>
           </div>
-          {/* Stats pills */}
           <div style={{ display: "flex", gap: 6 }}>
             {agentCount > 0 && (
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                  padding: "3px 10px",
-                  borderRadius: 20,
-                  background: "#1e293b",
-                  border: "1px solid #334155",
-                  fontSize: "0.7rem",
-                  fontWeight: 600,
-                  color: "#94a3b8",
-                }}
-              >
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: 4,
+                padding: "3px 10px", borderRadius: 20,
+                background: "#1e293b", border: "1px solid #334155",
+                fontSize: "0.7rem", fontWeight: 600, color: "#94a3b8",
+              }}>
                 <Users size={11} style={{ color: "#8b5cf6" }} />
-                {agentCount}
+                {agentCount} agent{agentCount !== 1 ? "s" : ""}
               </span>
             )}
             {emailCount > 0 && (
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                  padding: "3px 10px",
-                  borderRadius: 20,
-                  background: "#1e293b",
-                  border: "1px solid #334155",
-                  fontSize: "0.7rem",
-                  fontWeight: 600,
-                  color: "#94a3b8",
-                }}
-              >
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: 4,
+                padding: "3px 10px", borderRadius: 20,
+                background: "#1e293b", border: "1px solid #334155",
+                fontSize: "0.7rem", fontWeight: 600, color: "#94a3b8",
+              }}>
                 <Mail size={11} style={{ color: "#818cf8" }} />
-                {emailCount}
+                {emailCount} email{emailCount !== 1 ? "s" : ""}
               </span>
             )}
             {state.orchestratorPhase && state.orchestratorPhase !== "completed" && (
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                  padding: "3px 10px",
-                  borderRadius: 20,
-                  background: "rgba(34, 197, 94, 0.1)",
-                  border: "1px solid rgba(34, 197, 94, 0.3)",
-                  fontSize: "0.7rem",
-                  fontWeight: 600,
-                  color: "#22c55e",
-                  animation: "node-pulse 2s ease-in-out infinite",
-                }}
-              >
+              <span style={{
+                display: "inline-flex", alignItems: "center", gap: 4,
+                padding: "3px 10px", borderRadius: 20,
+                background: "rgba(34, 197, 94, 0.1)",
+                border: "1px solid rgba(34, 197, 94, 0.3)",
+                fontSize: "0.7rem", fontWeight: 600, color: "#22c55e",
+                animation: "node-pulse 2s ease-in-out infinite",
+              }}>
                 {state.orchestratorPhase}
               </span>
             )}
@@ -158,22 +137,15 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
                 onClick={handleKill}
                 disabled={killing}
                 style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "7px 14px",
-                  borderRadius: 8,
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "7px 14px", borderRadius: 8,
                   border: "1px solid #ef444480",
                   background: "linear-gradient(135deg, #dc2626, #b91c1c)",
-                  color: "#fff",
-                  fontWeight: 700,
-                  fontSize: "0.75rem",
+                  color: "#fff", fontWeight: 700, fontSize: "0.75rem",
                   cursor: killing ? "not-allowed" : "pointer",
-                  fontFamily: "inherit",
-                  opacity: killing ? 0.6 : 1,
+                  fontFamily: "inherit", opacity: killing ? 0.6 : 1,
                   boxShadow: "0 0 20px rgba(239,68,68,0.25), inset 0 1px 0 rgba(255,255,255,0.1)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.04em",
+                  textTransform: "uppercase", letterSpacing: "0.04em",
                 }}
               >
                 <OctagonX size={13} />
@@ -185,46 +157,101 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
         </div>
       </div>
 
-      {/* Agent Network Graph (~40% height) */}
-      <div style={{ padding: "12px 24px 0" }}>
-        <h2 style={sectionHeaderStyle}>
-          <Network size={14} style={{ color: "#818cf8" }} />
-          Agent Network
+      {/* ═══ Main Content: Graph (left) + Agent Cards (right) ═══ */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: agentCount > 0 ? "340px 1fr" : "1fr",
+          gap: 16,
+          padding: "16px 24px 0",
+          minHeight: 380,
+        }}
+      >
+        {/* Left: Agent Network Graph */}
+        <div>
+          <h2 style={sectionHeaderStyle}>
+            <Network size={14} style={{ color: "#818cf8" }} />
+            Agent Network
+          </h2>
+          <div style={{ height: agentCount > 0 ? 340 : 320 }}>
+            <AgentNetworkGraph />
+          </div>
+          {/* Orchestrator thought below graph */}
           {state.thoughts.planner && (
-            <span style={{ fontWeight: 400, fontStyle: "italic", color: "#475569", fontSize: "0.68rem", marginLeft: 8 }}>
-              {state.thoughts.planner.slice(0, 80)}
-              {state.thoughts.planner.length > 80 && "..."}
-            </span>
+            <div style={{
+              marginTop: 8, padding: "8px 12px",
+              background: "#111827", borderRadius: 8,
+              border: "1px solid #1e293b",
+              fontSize: "0.72rem", fontStyle: "italic",
+              color: "#94a3b8", maxHeight: 60, overflow: "hidden",
+            }}>
+              <span style={{ color: "#818cf8", fontWeight: 600, fontStyle: "normal" }}>Orchestrator: </span>
+              {state.thoughts.planner.slice(0, 150)}
+              {state.thoughts.planner.length > 150 && "..."}
+            </div>
           )}
-        </h2>
-        <div style={{ height: "calc(40vh - 60px)", minHeight: 280 }}>
-          <AgentNetworkGraph />
         </div>
+
+        {/* Right: Agent Cards Grid (with browser iframes) */}
+        {agentCount > 0 && (
+          <div>
+            <h2 style={sectionHeaderStyle}>
+              <Zap size={14} style={{ color: "#f59e0b" }} />
+              Active Agents
+            </h2>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(" + gridCols + ", 1fr)",
+                gap: 12,
+                maxHeight: 420,
+                overflowY: "auto",
+              }}
+            >
+              <AnimatePresence>
+                {state.spawnedAgents.map((agent) => (
+                  <AgentCard
+                    key={agent.id}
+                    agent={agent}
+                    browser={state.browsers[agent.id]}
+                    thought={state.thoughts[agent.id]}
+                  />
+                ))}
+              </AnimatePresence>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Agent Detail Panel (~45% height) */}
-      <div style={{ padding: "12px 24px 0" }}>
-        <AgentDetailPanel />
-      </div>
+      {/* ═══ Email Chain: All agent-to-agent emails ═══ */}
+      {(state.emails.length > 0 || emailCount > 0) && (
+        <div style={{ padding: "16px 24px 0" }}>
+          <h2 style={sectionHeaderStyle}>
+            <Mail size={14} style={{ color: "#818cf8" }} />
+            Agent Email Chain
+            <span style={{ fontWeight: 400, color: "#475569", fontSize: "0.68rem", marginLeft: 4 }}>
+              {state.emails.length} messages
+            </span>
+          </h2>
+          <div style={{
+            background: "#0f0f18", borderRadius: 12,
+            border: "1px solid #1e293b", overflow: "hidden",
+          }}>
+            <EmailChainView emails={state.emails} />
+          </div>
+        </div>
+      )}
 
-      {/* Collapsible bottom section */}
+      {/* ═══ Collapsible: Enforcement | Wallet | Mission Control ═══ */}
       <div style={{ padding: "12px 24px 24px" }}>
         <button
           onClick={() => setBottomExpanded(!bottomExpanded)}
           style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "8px 0",
-            background: "none",
-            border: "none",
-            color: "#64748b",
-            fontSize: "0.72rem",
-            fontWeight: 600,
-            cursor: "pointer",
-            fontFamily: "inherit",
-            textTransform: "uppercase",
-            letterSpacing: "0.05em",
+            display: "flex", alignItems: "center", gap: 6,
+            padding: "8px 0", background: "none", border: "none",
+            color: "#64748b", fontSize: "0.72rem", fontWeight: 600,
+            cursor: "pointer", fontFamily: "inherit",
+            textTransform: "uppercase", letterSpacing: "0.05em",
           }}
         >
           <ChevronDown
@@ -246,14 +273,10 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
               transition={{ duration: 0.2 }}
               style={{ overflow: "hidden" }}
             >
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 12,
-                  paddingTop: 8,
-                }}
-              >
+              <div style={{
+                display: "grid", gridTemplateColumns: "1fr 1fr",
+                gap: 12, paddingTop: 8,
+              }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   <div>
                     <h2 style={sectionHeaderStyle}>
