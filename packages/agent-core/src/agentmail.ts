@@ -43,34 +43,81 @@ export function createAgentMailClient(apiKey: string): AgentMailClient {
         body: JSON.stringify({ username }),
       });
       if (!res.ok) throw new Error(`AgentMail createInbox failed: ${res.status}`);
-      return res.json() as Promise<{ address: string; id: string }>;
+      const data = await res.json() as { inbox_id: string };
+      // inbox_id IS the email address (e.g. "username@agentmail.to")
+      return { address: data.inbox_id, id: data.inbox_id };
     },
 
     async sendMessage(opts) {
-      const res = await fetch(`${baseUrl}/messages`, {
+      // API: POST /v0/inboxes/{inbox_id}/messages/send
+      // "from" is the inbox_id (email address) of the sender
+      const encodedFrom = encodeURIComponent(opts.from);
+      const res = await fetch(`${baseUrl}/inboxes/${encodedFrom}/messages/send`, {
         method: "POST",
         headers,
-        body: JSON.stringify(opts),
+        body: JSON.stringify({
+          to: [opts.to],
+          subject: opts.subject,
+          text: opts.body,
+          ...(opts.inReplyTo ? { headers: { "In-Reply-To": opts.inReplyTo } } : {}),
+        }),
       });
-      if (!res.ok) throw new Error(`AgentMail sendMessage failed: ${res.status}`);
-      return res.json() as Promise<{ messageId: string; threadId: string }>;
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => "");
+        throw new Error(`AgentMail sendMessage failed: ${res.status} ${errBody}`);
+      }
+      const data = await res.json() as { message_id: string; thread_id: string };
+      return { messageId: data.message_id, threadId: data.thread_id };
     },
 
     async listThreads(inboxId) {
-      const res = await fetch(`${baseUrl}/inboxes/${inboxId}/threads`, { headers });
+      const encodedId = encodeURIComponent(inboxId);
+      const res = await fetch(`${baseUrl}/inboxes/${encodedId}/threads`, { headers });
       if (!res.ok) throw new Error(`AgentMail listThreads failed: ${res.status}`);
-      const data = await res.json() as { threads: Thread[] };
-      return data.threads;
+      const data = await res.json() as {
+        threads: Array<{
+          thread_id: string;
+          subject: string;
+          preview: string;
+          senders: string[];
+          recipients: string[];
+          timestamp: string;
+          message_count: number;
+        }>;
+      };
+      // Map to our Thread interface (lightweight — no full message bodies)
+      return data.threads.map((t) => ({
+        id: t.thread_id,
+        subject: t.subject || "",
+        messages: [{
+          id: t.thread_id,
+          from: t.senders?.[0] || "",
+          to: t.recipients?.[0] || "",
+          subject: t.subject || "",
+          body: t.preview || "",
+          createdAt: t.timestamp || "",
+        }],
+      }));
     },
 
     async createWebhook(opts) {
+      // API: POST /v0/webhooks
+      // Body: { url, eventTypes, inboxIds? }
       const res = await fetch(`${baseUrl}/webhooks`, {
         method: "POST",
         headers,
-        body: JSON.stringify(opts),
+        body: JSON.stringify({
+          url: opts.url,
+          event_types: opts.events,
+          inbox_ids: [opts.inboxId],
+        }),
       });
-      if (!res.ok) throw new Error(`AgentMail createWebhook failed: ${res.status}`);
-      return res.json() as Promise<{ webhookId: string }>;
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => "");
+        throw new Error(`AgentMail createWebhook failed: ${res.status} ${errBody}`);
+      }
+      const data = await res.json() as { webhook_id: string };
+      return { webhookId: data.webhook_id };
     },
   };
 }

@@ -42,7 +42,7 @@ export async function handleRegisterEvent(opts: {
       description: "Navigate to a URL",
       parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] },
       execute: async (args: Record<string, unknown>) => {
-        const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `await page.goto('${args.url}', { waitUntil: 'networkidle2', timeout: 20000 }); const title = await page.title(); title;` });
+        const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `await page.goto('${args.url}', { waitUntil: 'networkidle', timeout: 20000 }); var _title = await page.title(); _title;` });
         return { title: result.output };
       },
     },
@@ -86,7 +86,7 @@ export async function handleRegisterEvent(opts: {
       description: "Extract visible text from the current page",
       parameters: { type: "object", properties: {} },
       execute: async () => {
-        const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `const text = await page.evaluate(() => document.body.innerText); text.substring(0, 5000);` });
+        const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `var _text = await page.evaluate(() => document.body.innerText); _text.substring(0, 5000);` });
         return { text: result.output };
       },
     },
@@ -95,7 +95,7 @@ export async function handleRegisterEvent(opts: {
       description: "Take a screenshot",
       parameters: { type: "object", properties: {} },
       execute: async () => {
-        const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `const s = await page.screenshot({ encoding: 'base64' }); s;` });
+        const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `var _s = await page.screenshot({ encoding: 'base64' }); _s;` });
         if (result.screenshot) confirmationScreenshot = result.screenshot;
         return { captured: true };
       },

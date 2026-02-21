@@ -9,6 +9,7 @@ export async function runTripPlan(opts: {
   humanEmail: { from: string; subject: string; body: string };
   sseHub: SSEHub;
   config: PlannerEnv;
+  plannerInboxAddress?: string;
 }): Promise<void> {
   const provider = new JsonRpcProvider(opts.config.KITE_RPC_URL);
   const agentWallet = new Wallet(opts.config.PLANNER_AGENT_PRIVATE_KEY, provider);
@@ -34,6 +35,7 @@ export async function runTripPlan(opts: {
 
   const emailTools = createEmailTools({
     agentMailApiKey: opts.config.AGENTMAIL_API_KEY,
+    plannerInboxAddress: opts.plannerInboxAddress,
     sseHub: opts.sseHub,
   });
 

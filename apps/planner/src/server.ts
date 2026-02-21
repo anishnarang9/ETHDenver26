@@ -7,12 +7,29 @@ import { runTripPlan } from "./orchestrator.js";
 
 const config = loadConfig();
 
+import type { MailBootstrapResult } from "./bootstrap-mail.js";
+
+// Mail addresses populated by bootstrap
+let mailAddresses: MailBootstrapResult | null = null;
+export function setMailAddresses(addresses: MailBootstrapResult) {
+  mailAddresses = addresses;
+  app.log.info("AgentMail addresses configured: planner=%s", addresses.plannerInbox.address);
+}
+
 const dbWriter: RunEventWriter = {
   async write(event) {
     await prisma.runEvent.create({
       data: {
+<<<<<<< HEAD
         ...event,
         payload: event.payload as Prisma.InputJsonValue,
+=======
+        runId: event.runId,
+        offsetMs: event.offsetMs,
+        type: event.type,
+        agentId: event.agentId,
+        payload: event.payload as any,
+>>>>>>> vitthal
       },
     });
   },
@@ -75,7 +92,7 @@ app.post("/api/webhook/email", async (request) => {
 
   // Start trip planning in background
   currentHub = new SSEHub({ dbWriter });
-  runTripPlan({ humanEmail, sseHub: currentHub, config }).catch((err) => {
+  runTripPlan({ humanEmail, sseHub: currentHub, config, plannerInboxAddress: mailAddresses?.plannerInbox.address }).catch((err) => {
     app.log.error(err, "Trip planning failed");
     currentHub.emit({ type: "error", agentId: "planner", payload: { message: (err as Error).message } });
   });
@@ -109,12 +126,24 @@ app.post("/api/trigger", async (request) => {
   }
 
   currentHub = new SSEHub({ dbWriter });
-  runTripPlan({ humanEmail, sseHub: currentHub, config }).catch((err) => {
+  runTripPlan({ humanEmail, sseHub: currentHub, config, plannerInboxAddress: mailAddresses?.plannerInbox.address }).catch((err) => {
     app.log.error(err, "Trip planning failed");
     currentHub.emit({ type: "error", agentId: "planner", payload: { message: (err as Error).message } });
   });
 
   return { ok: true, runId: currentHub.runId, action };
+});
+
+// Expose inbox addresses for the dashboard
+app.get("/api/mail-addresses", async () => {
+  if (!mailAddresses) return { configured: false };
+  return {
+    configured: true,
+    planner: mailAddresses.plannerInbox.address,
+    rider: mailAddresses.riderInbox.address,
+    foodie: mailAddresses.foodieInbox.address,
+    eventbot: mailAddresses.eventbotInbox.address,
+  };
 });
 
 // List previous runs
