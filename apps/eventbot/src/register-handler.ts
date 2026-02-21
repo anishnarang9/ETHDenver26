@@ -8,6 +8,11 @@ export interface RegistrationResult {
   message: string;
 }
 
+/** Escape a value for safe interpolation into Puppeteer code */
+function esc(value: unknown): string {
+  return JSON.stringify(String(value ?? ""));
+}
+
 export async function handleRegisterEvent(opts: {
   eventUrl: string;
   name: string;
@@ -42,7 +47,12 @@ export async function handleRegisterEvent(opts: {
       description: "Navigate to a URL",
       parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] },
       execute: async (args: Record<string, unknown>) => {
-        const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `await page.goto('${args.url}', { waitUntil: 'networkidle', timeout: 20000 }); var _title = await page.title(); _title;` });
+        const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `
+          await page.goto(${esc(args.url)}, { waitUntil: 'domcontentloaded', timeout: 30000 });
+          await page.waitForTimeout(4000);
+          var _title = await page.title();
+          _title;
+        ` });
         return { title: result.output };
       },
     },
@@ -52,8 +62,16 @@ export async function handleRegisterEvent(opts: {
       parameters: { type: "object", properties: { selector: { type: "string" }, text: { type: "string" } } },
       execute: async (args: Record<string, unknown>) => {
         const code = args.selector
-          ? `await page.click('${args.selector}'); await page.waitForTimeout(2000); 'clicked';`
-          : `await page.evaluate((t) => { const el = [...document.querySelectorAll('a, button, [role="button"], input[type="submit"]')].find(e => e.textContent?.toLowerCase().includes(t.toLowerCase())); if (el) el.click(); }, '${args.text}'); await page.waitForTimeout(2000); 'clicked';`;
+          ? `await page.click(${esc(args.selector)}); await page.waitForTimeout(2000); 'clicked';`
+          : `
+            await page.evaluate((t) => {
+              const el = [...document.querySelectorAll('a, button, [role="button"], input[type="submit"]')]
+                .find(e => e.textContent?.toLowerCase().includes(t.toLowerCase()));
+              if (el) el.click();
+            }, ${esc(args.text)});
+            await page.waitForTimeout(2000);
+            'clicked';
+          `;
         const result = await executeBrowserCode({ apiKey, sessionId: sid, code });
         return { result: result.output };
       },
@@ -64,20 +82,32 @@ export async function handleRegisterEvent(opts: {
       parameters: { type: "object", properties: { identifier: { type: "string" }, value: { type: "string" } }, required: ["identifier", "value"] },
       execute: async (args: Record<string, unknown>) => {
         const code = `
-          const identifier = '${args.identifier}';
-          const value = '${args.value}';
+          const identifier = ${esc(args.identifier)};
+          const value = ${esc(args.value)};
           let filled = false;
-          // Try by CSS selector
           try { const el = await page.$(identifier); if (el) { await el.click({ clickCount: 3 }); await el.type(value); filled = true; } } catch {}
-          // Try by placeholder
           if (!filled) { try { const el = await page.$(\`input[placeholder*="\${identifier}" i], textarea[placeholder*="\${identifier}" i]\`); if (el) { await el.click({ clickCount: 3 }); await el.type(value); filled = true; } } catch {} }
-          // Try by name
           if (!filled) { try { const el = await page.$(\`input[name*="\${identifier}" i], textarea[name*="\${identifier}" i]\`); if (el) { await el.click({ clickCount: 3 }); await el.type(value); filled = true; } } catch {} }
-          // Try by label
           if (!filled) { try { await page.evaluate((id, val) => { const labels = document.querySelectorAll('label'); for (const label of labels) { if (label.textContent?.toLowerCase().includes(id.toLowerCase())) { const input = label.querySelector('input, textarea') || document.getElementById(label.htmlFor || ''); if (input) { (input as HTMLInputElement).value = val; input.dispatchEvent(new Event('input', { bubbles: true })); return; } } } }, identifier, value); filled = true; } catch {} }
           filled ? 'filled' : 'not found';
         `;
         const result = await executeBrowserCode({ apiKey, sessionId: sid, code });
+        return { result: result.output };
+      },
+    },
+    {
+      name: "scroll_down",
+      description: "Scroll down to reveal more content or find buttons below the fold",
+      parameters: { type: "object", properties: { times: { type: "number" } } },
+      execute: async (args: Record<string, unknown>) => {
+        const n = Math.min(Number(args.times) || 3, 10);
+        const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `
+          for (let i = 0; i < ${n}; i++) {
+            await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+            await page.waitForTimeout(1000);
+          }
+          'scrolled';
+        ` });
         return { result: result.output };
       },
     },
@@ -118,16 +148,16 @@ export async function handleRegisterEvent(opts: {
 Steps:
 1. Navigate to the event URL
 2. Find and click the "Register" or "RSVP" button
-3. Wait for the form to appear
-4. Use get_form_fields to see available fields
-5. Fill in the name and email fields using fill_input
-6. Click the submit/register button
-7. Take a screenshot of the confirmation
-8. Return a JSON with: { "success": true/false, "eventName": "...", "message": "..." }
+3. Wait for the form to appear — use extract_text or get_form_fields to check
+4. Fill in the name and email fields using fill_input
+5. Click the submit/register button
+6. Take a screenshot of the confirmation
+7. Return a JSON with: { "success": true/false, "eventName": "...", "message": "..." }
 
 The registrant's name is: ${opts.name}
 The registrant's email is: ${opts.email}
 
+lu.ma is a React SPA — pages load dynamically. After navigating, wait for content to render.
 Be careful and methodical. If a step fails, try alternative approaches.`,
     userMessage: `Register for the event at: ${opts.eventUrl}`,
     tools,
@@ -145,7 +175,10 @@ Be careful and methodical. If a step fails, try alternative approaches.`,
   let message = result.finalAnswer;
 
   try {
-    const parsed = JSON.parse(result.finalAnswer);
+    let raw = result.finalAnswer;
+    const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenceMatch) raw = fenceMatch[1]!;
+    const parsed = JSON.parse(raw);
     success = parsed.success ?? false;
     eventName = parsed.eventName ?? "";
     message = parsed.message ?? result.finalAnswer;

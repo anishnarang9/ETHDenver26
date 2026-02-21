@@ -80,23 +80,21 @@ export function EnforcementPipeline({ steps }: { steps: Step[] }) {
         }
       `}</style>
 
-      {/* Header */}
+      {/* Status badge (compact, no duplicate header) */}
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          marginBottom: "10px",
+          marginBottom: "8px",
         }}
       >
-        <h3 style={{ margin: 0, fontSize: "0.9rem", color: "#94a3b8", fontWeight: 600 }}>
-          Enforcement Pipeline
-        </h3>
         <span
           style={{
-            fontSize: "0.7rem",
-            color: hasFailed ? "#f87171" : passedCount > 0 ? "#4ade80" : "#475569",
-            fontWeight: 500,
+            fontSize: "0.68rem",
+            color: hasFailed ? "#f87171" : passedCount > 0 ? "#4ade80" : "#64748b",
+            fontWeight: 600,
+            letterSpacing: "0.03em",
           }}
         >
           {hasFailed
@@ -104,8 +102,8 @@ export function EnforcementPipeline({ steps }: { steps: Step[] }) {
             : passedCount === totalSteps
               ? "ALL CLEAR"
               : passedCount > 0
-                ? `${passedCount}/${totalSteps} passed`
-                : "Awaiting"}
+                ? `${passedCount}/${totalSteps} checks passed`
+                : "Idle — waiting for agent activity"}
         </span>
       </div>
 

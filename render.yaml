@@ -92,4 +92,52 @@ services:
         value: https://x402.dev.gokite.ai
       - key: PLANNER_BASE_URL
         value: https://kite-planner.onrender.com
+      - key: RIDER_URL
+        value: https://kite-rider.onrender.com
+      - key: FOODIE_URL
+        value: https://kite-foodie.onrender.com
+      - key: EVENTBOT_URL
+        value: https://kite-eventbot.onrender.com
+      - fromGroup: kite-shared-env
+
+  # ── Rider (transport specialist) ────────────────────────
+  - type: web
+    name: kite-rider
+    runtime: node
+    plan: free
+    buildCommand: npm install -g pnpm@9.12.2 && NODE_ENV=development pnpm install && pnpm db:generate && (npx prisma db push --schema=packages/db/prisma/schema.prisma --skip-generate || echo "prisma push skipped")
+    startCommand: npx tsx apps/rider/src/index.ts
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: HOST
+        value: "0.0.0.0"
+      - fromGroup: kite-shared-env
+
+  # ── Foodie (restaurant specialist) ────────────────────────
+  - type: web
+    name: kite-foodie
+    runtime: node
+    plan: free
+    buildCommand: npm install -g pnpm@9.12.2 && NODE_ENV=development pnpm install && pnpm db:generate && (npx prisma db push --schema=packages/db/prisma/schema.prisma --skip-generate || echo "prisma push skipped")
+    startCommand: npx tsx apps/foodie/src/index.ts
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: HOST
+        value: "0.0.0.0"
+      - fromGroup: kite-shared-env
+
+  # ── EventBot (event specialist) ────────────────────────
+  - type: web
+    name: kite-eventbot
+    runtime: node
+    plan: free
+    buildCommand: npm install -g pnpm@9.12.2 && NODE_ENV=development pnpm install && pnpm db:generate && (npx prisma db push --schema=packages/db/prisma/schema.prisma --skip-generate || echo "prisma push skipped")
+    startCommand: npx tsx apps/eventbot/src/index.ts
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: HOST
+        value: "0.0.0.0"
       - fromGroup: kite-shared-env

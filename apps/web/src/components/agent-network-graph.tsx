@@ -195,19 +195,59 @@ export function AgentNetworkGraph() {
         ctx.lineWidth = Math.min(link.emailCount, 4);
         ctx.stroke();
 
-        // Animated particle for recent emails
+        // Animated particle traveling along edge for recent emails
         if (isRecent) {
           const progress = (age % 1500) / 1500;
           const px = sx + (tx - sx) * progress;
           const py = sy + (ty - sy) * progress;
 
           ctx.beginPath();
-          ctx.arc(px, py, 3, 0, Math.PI * 2);
+          ctx.arc(px, py, 4, 0, Math.PI * 2);
           ctx.fillStyle = "#818cf8";
           ctx.shadowColor = "#818cf8";
-          ctx.shadowBlur = 8;
+          ctx.shadowBlur = 10;
           ctx.fill();
           ctx.shadowBlur = 0;
+        }
+
+        // Email pop burst at midpoint for brand-new emails (< 2.5s)
+        if (isRecent && age < 2500) {
+          const mx = (sx + tx) / 2;
+          const my = (sy + ty) / 2;
+          const popProgress = age / 2500;
+
+          // Expanding ring
+          const ringRadius = 8 + popProgress * 30;
+          const ringAlpha = Math.max(0, 1 - popProgress * 1.3);
+          ctx.beginPath();
+          ctx.arc(mx, my, ringRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(129, 140, 248, ${(ringAlpha * 0.5).toFixed(2)})`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          // Inner glow dot
+          const dotAlpha = Math.max(0, 1 - popProgress * 1.5);
+          const dotSize = popProgress < 0.1 ? (popProgress / 0.1) * 6 : 6 * (1 - popProgress * 0.5);
+          ctx.beginPath();
+          ctx.arc(mx, my, Math.max(dotSize, 1), 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(129, 140, 248, ${dotAlpha.toFixed(2)})`;
+          ctx.shadowColor = "#818cf8";
+          ctx.shadowBlur = 12;
+          ctx.fill();
+          ctx.shadowBlur = 0;
+
+          // Mail emoji pop
+          const envAlpha = Math.max(0, 1 - popProgress * 1.2);
+          if (envAlpha > 0) {
+            ctx.save();
+            ctx.globalAlpha = envAlpha;
+            const envSize = popProgress < 0.12 ? 10 + (popProgress / 0.12) * 6 : 16 - popProgress * 4;
+            ctx.font = `${Math.max(envSize, 8)}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("\u2709", mx, my - 12);
+            ctx.restore();
+          }
         }
 
         // Email count label

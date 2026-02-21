@@ -16,6 +16,11 @@ export interface BrowserTool {
   execute: (args: Record<string, unknown>) => Promise<unknown>;
 }
 
+/** Escape a value for safe interpolation into Puppeteer code */
+function esc(value: unknown): string {
+  return JSON.stringify(String(value ?? ""));
+}
+
 export async function createBrowserToolsWithSession(opts: {
   firecrawlApiKey?: string;
   agentId: string;
@@ -28,7 +33,7 @@ export async function createBrowserToolsWithSession(opts: {
 
   if (opts.firecrawlApiKey) {
     try {
-      const session = await createBrowserSession({ apiKey: opts.firecrawlApiKey, ttl: opts.ttl });
+      const session = await createBrowserSession({ apiKey: opts.firecrawlApiKey, ttl: opts.ttl ?? 600 });
       sessionId = session.id;
       liveViewUrl = session.liveViewUrl;
       opts.sseHub.emit({
@@ -55,7 +60,12 @@ export async function createBrowserToolsWithSession(opts: {
         execute: async (args: Record<string, unknown>) => {
           const result = await executeBrowserCode({
             apiKey, sessionId: sid,
-            code: `await page.goto('${args.url}', { waitUntil: 'networkidle', timeout: 15000 }); var _title = await page.title(); _title;`,
+            code: `
+              await page.goto(${esc(args.url)}, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await page.waitForTimeout(4000);
+              var _title = await page.title();
+              _title;
+            `,
           });
           return { title: result.output };
         },
@@ -66,8 +76,16 @@ export async function createBrowserToolsWithSession(opts: {
         parameters: { type: "object", properties: { selector: { type: "string" }, text: { type: "string" } } },
         execute: async (args: Record<string, unknown>) => {
           const code = args.selector
-            ? `await page.click('${args.selector}'); await page.waitForTimeout(2000); 'clicked';`
-            : `await page.evaluate((t) => { const el = [...document.querySelectorAll('a, button, [role="button"], input[type="submit"]')].find(e => e.textContent?.toLowerCase().includes(t.toLowerCase())); if (el) el.click(); }, '${args.text}'); await page.waitForTimeout(2000); 'clicked';`;
+            ? `await page.click(${esc(args.selector)}); await page.waitForTimeout(2000); 'clicked';`
+            : `
+              await page.evaluate((t) => {
+                const el = [...document.querySelectorAll('a, button, [role="button"], input[type="submit"]')]
+                  .find(e => e.textContent?.toLowerCase().includes(t.toLowerCase()));
+                if (el) el.click();
+              }, ${esc(args.text)});
+              await page.waitForTimeout(2000);
+              'clicked';
+            `;
           const result = await executeBrowserCode({ apiKey, sessionId: sid, code });
           return { result: result.output };
         },
@@ -78,8 +96,8 @@ export async function createBrowserToolsWithSession(opts: {
         parameters: { type: "object", properties: { identifier: { type: "string" }, value: { type: "string" } }, required: ["identifier", "value"] },
         execute: async (args: Record<string, unknown>) => {
           const code = `
-            const identifier = '${args.identifier}';
-            const value = '${args.value}';
+            const identifier = ${esc(args.identifier)};
+            const value = ${esc(args.value)};
             let filled = false;
             try { const el = await page.$(identifier); if (el) { await el.click({ clickCount: 3 }); await el.type(value); filled = true; } } catch {}
             if (!filled) { try { const el = await page.$(\`input[placeholder*="\${identifier}" i], textarea[placeholder*="\${identifier}" i]\`); if (el) { await el.click({ clickCount: 3 }); await el.type(value); filled = true; } } catch {} }
@@ -98,9 +116,36 @@ export async function createBrowserToolsWithSession(opts: {
         execute: async (args: Record<string, unknown>) => {
           const result = await executeBrowserCode({
             apiKey, sessionId: sid,
-            code: `await page.keyboard.type('${args.text}'); await page.keyboard.press('Enter'); await page.waitForTimeout(3000); var _text = await page.evaluate(() => document.body.innerText.substring(0, 3000)); _text;`,
+            code: `
+              await page.keyboard.type(${esc(args.text)});
+              await page.keyboard.press('Enter');
+              await page.waitForTimeout(4000);
+              var _text = await page.evaluate(() => document.body.innerText.substring(0, 4000));
+              _text;
+            `,
           });
           return { pageText: result.output };
+        },
+      },
+      {
+        name: "scroll_down",
+        description: "Scroll down the page to load more content. Useful for infinite-scroll pages like lu.ma.",
+        parameters: { type: "object", properties: { times: { type: "number", description: "Number of scroll increments (default 3)" } } },
+        execute: async (args: Record<string, unknown>) => {
+          const n = Math.min(Number(args.times) || 3, 10);
+          const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `
+            for (let i = 0; i < ${n}; i++) {
+              await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+              await page.waitForTimeout(1500);
+            }
+            var _h = await page.evaluate(() => ({
+              scrollY: window.scrollY,
+              docHeight: document.body.scrollHeight,
+              innerHeight: window.innerHeight,
+            }));
+            JSON.stringify(_h);
+          ` });
+          return { scrollInfo: result.output };
         },
       },
       {
@@ -108,12 +153,31 @@ export async function createBrowserToolsWithSession(opts: {
         description: "Extract visible text from the current page",
         parameters: { type: "object", properties: { maxLength: { type: "number" } } },
         execute: async (args: Record<string, unknown>) => {
-          const maxLen = (args.maxLength as number) || 4000;
+          const maxLen = Math.min(Number(args.maxLength) || 5000, 8000);
           const result = await executeBrowserCode({
             apiKey, sessionId: sid,
             code: `var _text = await page.evaluate(() => document.body.innerText); _text.substring(0, ${maxLen});`,
           });
           return { text: result.output };
+        },
+      },
+      {
+        name: "extract_links",
+        description: "Extract all links from the current page, optionally filtered by keyword. Useful for finding event URLs.",
+        parameters: { type: "object", properties: { filter: { type: "string", description: "Optional keyword to filter links" } } },
+        execute: async (args: Record<string, unknown>) => {
+          const result = await executeBrowserCode({ apiKey, sessionId: sid, code: `
+            var _links = await page.evaluate((filterStr) => {
+              const all = Array.from(document.querySelectorAll('a[href]'));
+              return all
+                .map(a => ({ href: a.href, text: (a.textContent || '').trim().substring(0, 120) }))
+                .filter(l => l.text.length > 0)
+                .filter(l => !filterStr || l.href.toLowerCase().includes(filterStr.toLowerCase()) || l.text.toLowerCase().includes(filterStr.toLowerCase()))
+                .slice(0, 60);
+            }, ${esc(args.filter || "")});
+            JSON.stringify(_links);
+          ` });
+          return { links: result.output };
         },
       },
       {

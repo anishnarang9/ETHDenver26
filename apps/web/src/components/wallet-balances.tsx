@@ -57,6 +57,16 @@ const cardVariants = {
 
 /* ==================== WalletBalances ==================== */
 export function WalletBalances({ wallets }: { wallets: AgentWallet[] }) {
+  // Single wallet: render as compact inline card (no grid)
+  if (wallets.length <= 1) {
+    return (
+      <motion.div variants={containerVariants} initial="hidden" animate="show">
+        {wallets.map((w) => (
+          <WalletCard key={w.name} wallet={w} />
+        ))}
+      </motion.div>
+    );
+  }
   return (
     <motion.div
       variants={containerVariants}
@@ -114,7 +124,7 @@ function AnimatedBalance({ value, direction, color }: { value: string; direction
       }
       transition={{ duration: 0.8, ease: "easeOut" }}
       style={{
-        fontSize: "1.15rem",
+        fontSize: "0.95rem",
         fontWeight: 700,
         color: flash ? "#6ee7b7" : color,
         fontVariantNumeric: "tabular-nums",
@@ -294,12 +304,12 @@ function WalletCard({ wallet }: { wallet: AgentWallet }) {
   return (
     <motion.div
       variants={cardVariants}
-      whileHover={{ scale: 1.03, y: -2, boxShadow: `0 0 20px ${wallet.color}22` }}
+      whileHover={{ scale: 1.02, boxShadow: `0 0 12px ${wallet.color}18` }}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
       style={{
         position: "relative",
-        padding: "10px 12px",
+        padding: "8px 10px",
         background: "#0f172a",
         borderRadius: "8px",
         borderLeft: `3px solid ${wallet.color}`,

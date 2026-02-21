@@ -10,7 +10,7 @@ import { MissionControl } from "./mission-control";
 import { WalletBalances } from "./wallet-balances";
 import { ReplayButton } from "./replay-button";
 import { AnimatePresence, motion } from "framer-motion";
-import { Mail, Shield, Command, Users, OctagonX, Network, ChevronDown, Zap } from "lucide-react";
+import { Mail, Shield, Command, Users, OctagonX, Network, Zap, Loader2 } from "lucide-react";
 
 const plannerWallet = [
   { name: "Planner (Orchestrator)", address: process.env.NEXT_PUBLIC_PLANNER_ADDRESS || "", color: "#3b82f6" },
@@ -31,7 +31,6 @@ const sectionHeaderStyle: React.CSSProperties = {
 export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
   const { state, dispatch } = useSSEState();
   const [killing, setKilling] = useState(false);
-  const [bottomExpanded, setBottomExpanded] = useState(false);
 
   const agentCount = state.spawnedAgents.length;
   const emailCount = state.emailEdges.length;
@@ -56,11 +55,11 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
     }
   };
 
-  const gridCols = agentCount <= 1 ? 1 : agentCount <= 2 ? 2 : 3;
+  const gridCols = agentCount <= 1 ? 1 : 2;
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#e2e8f0", fontFamily: "'Inter', sans-serif" }}>
-      {/* ═══ Header ═══ */}
+      {/* Header */}
       <div
         style={{
           display: "flex",
@@ -157,23 +156,32 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
         </div>
       </div>
 
-      {/* ═══ Main Content: Graph (left) + Agent Cards (right) ═══ */}
+      {/* Main 50/50 split: Graph (left) + Agent Cards (right) */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: agentCount > 0 ? "340px 1fr" : "1fr",
+          gridTemplateColumns: "1fr 1fr",
           gap: 16,
           padding: "16px 24px 0",
-          minHeight: 380,
         }}
       >
         {/* Left: Agent Network Graph */}
-        <div>
+        <div
+          style={{
+            background: "#0f0f18",
+            borderRadius: 12,
+            border: "1px solid #1e293b",
+            padding: 16,
+            minHeight: 380,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
           <h2 style={sectionHeaderStyle}>
             <Network size={14} style={{ color: "#818cf8" }} />
             Agent Network
           </h2>
-          <div style={{ height: agentCount > 0 ? 340 : 320 }}>
+          <div style={{ flex: 1, minHeight: 320 }}>
             <AgentNetworkGraph />
           </div>
           {/* Orchestrator thought below graph */}
@@ -192,20 +200,31 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
           )}
         </div>
 
-        {/* Right: Agent Cards Grid (with browser iframes) */}
-        {agentCount > 0 && (
-          <div>
-            <h2 style={sectionHeaderStyle}>
-              <Zap size={14} style={{ color: "#f59e0b" }} />
-              Active Agents
-            </h2>
+        {/* Right: Agent Cards */}
+        <div
+          style={{
+            background: "#0f0f18",
+            borderRadius: 12,
+            border: "1px solid #1e293b",
+            padding: 16,
+            minHeight: 380,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <h2 style={sectionHeaderStyle}>
+            <Zap size={14} style={{ color: "#f59e0b" }} />
+            Active Agents
+          </h2>
+          {agentCount > 0 ? (
             <div
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(" + gridCols + ", 1fr)",
                 gap: 12,
-                maxHeight: 420,
+                maxHeight: 440,
                 overflowY: "auto",
+                flex: 1,
               }}
             >
               <AnimatePresence>
@@ -219,93 +238,105 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
                 ))}
               </AnimatePresence>
             </div>
-          </div>
-        )}
+          ) : (
+            <div style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#334155",
+              gap: 8,
+            }}>
+              <Loader2 size={24} style={{ animation: "spin 2s linear infinite" }} />
+              <span style={{ fontSize: "0.78rem", color: "#475569" }}>
+                Waiting for agents to spawn...
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* ═══ Email Chain: All agent-to-agent emails ═══ */}
-      {(state.emails.length > 0 || emailCount > 0) && (
-        <div style={{ padding: "16px 24px 0" }}>
-          <h2 style={sectionHeaderStyle}>
-            <Mail size={14} style={{ color: "#818cf8" }} />
-            Agent Email Chain
-            <span style={{ fontWeight: 400, color: "#475569", fontSize: "0.68rem", marginLeft: 4 }}>
-              {state.emails.length} messages
-            </span>
-          </h2>
-          <div style={{
-            background: "#0f0f18", borderRadius: 12,
-            border: "1px solid #1e293b", overflow: "hidden",
-          }}>
-            <EmailChainView emails={state.emails} />
+      {/* Enforcement + Mission Control (2-col) */}
+      <div style={{ padding: "16px 24px 0" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          {/* Left: Enforcement Pipeline + Wallet */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div>
+              <h2 style={sectionHeaderStyle}>
+                <Shield size={14} style={{ color: "#f59e0b" }} />
+                Enforcement Pipeline
+              </h2>
+              <EnforcementPipeline steps={state.enforcementSteps} />
+            </div>
+            {plannerWallet.length > 0 && (
+              <div>
+                <h2 style={sectionHeaderStyle}>
+                  <span style={{ width: 14, height: 14, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem" }}>$</span>
+                  Orchestrator Wallet
+                </h2>
+                <WalletBalances wallets={plannerWallet} />
+              </div>
+            )}
+          </div>
+
+          {/* Right: Mission Control */}
+          <div>
+            <h2 style={sectionHeaderStyle}>
+              <Command size={14} style={{ color: "#3b82f6" }} />
+              Mission Control
+            </h2>
+            <MissionControl
+              transactions={state.transactions}
+              plannerUrl={plannerUrl}
+              agentAddress={process.env.NEXT_PUBLIC_PLANNER_ADDRESS}
+              plannerAddress={process.env.NEXT_PUBLIC_PLANNER_ADDRESS}
+            />
           </div>
         </div>
-      )}
-
-      {/* ═══ Collapsible: Enforcement | Wallet | Mission Control ═══ */}
-      <div style={{ padding: "12px 24px 24px" }}>
-        <button
-          onClick={() => setBottomExpanded(!bottomExpanded)}
-          style={{
-            display: "flex", alignItems: "center", gap: 6,
-            padding: "8px 0", background: "none", border: "none",
-            color: "#64748b", fontSize: "0.72rem", fontWeight: 600,
-            cursor: "pointer", fontFamily: "inherit",
-            textTransform: "uppercase", letterSpacing: "0.05em",
-          }}
-        >
-          <ChevronDown
-            size={14}
-            style={{
-              transform: bottomExpanded ? "rotate(180deg)" : "rotate(0deg)",
-              transition: "transform 0.2s",
-            }}
-          />
-          Enforcement | Wallet | Mission Control
-        </button>
-
-        <AnimatePresence>
-          {bottomExpanded && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-              style={{ overflow: "hidden" }}
-            >
-              <div style={{
-                display: "grid", gridTemplateColumns: "1fr 1fr",
-                gap: 12, paddingTop: 8,
-              }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <div>
-                    <h2 style={sectionHeaderStyle}>
-                      <Shield size={14} style={{ color: "#f59e0b" }} />
-                      Enforcement Pipeline
-                    </h2>
-                    <EnforcementPipeline steps={state.enforcementSteps} />
-                  </div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  {plannerWallet.length > 0 && <WalletBalances wallets={plannerWallet} />}
-                  <div>
-                    <h2 style={sectionHeaderStyle}>
-                      <Command size={14} style={{ color: "#3b82f6" }} />
-                      Mission Control
-                    </h2>
-                    <MissionControl
-                      transactions={state.transactions}
-                      plannerUrl={plannerUrl}
-                      agentAddress={process.env.NEXT_PUBLIC_PLANNER_ADDRESS}
-                      plannerAddress={process.env.NEXT_PUBLIC_PLANNER_ADDRESS}
-                    />
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
+
+      {/* Email Chain */}
+      <div style={{ padding: "16px 24px 0" }}>
+        <h2 style={sectionHeaderStyle}>
+          <Mail size={14} style={{ color: "#818cf8" }} />
+          Agent Email Chain
+          {state.emails.length > 0 && (
+            <span style={{
+              fontWeight: 500, color: "#818cf8", fontSize: "0.62rem",
+              marginLeft: 6, padding: "1px 6px", borderRadius: 10,
+              background: "rgba(129,140,248,0.1)", border: "1px solid rgba(129,140,248,0.2)",
+            }}>
+              {state.emails.length}
+            </span>
+          )}
+        </h2>
+        <div style={{
+          background: "#0f0f18", borderRadius: 12,
+          border: "1px solid #1e293b", overflow: "hidden",
+          minHeight: 60,
+        }}>
+          {state.emails.length > 0 ? (
+            <EmailChainView emails={state.emails} />
+          ) : (
+            <div style={{
+              padding: "24px 20px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 6,
+            }}>
+              <Mail size={18} style={{ color: "#1e293b" }} />
+              <span style={{ fontSize: "0.72rem", color: "#334155" }}>
+                Agent emails will appear here as they communicate
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom spacer */}
+      <div style={{ height: 24 }} />
     </div>
   );
 }

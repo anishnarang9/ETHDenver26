@@ -3,7 +3,7 @@ import cors from "@fastify/cors";
 import {
   createRouteEnforcer, enforcementErrorHandler, DefaultSignatureVerifier,
   InMemoryQuoteStore, InMemoryNonceStore, InMemoryBudgetService,
-  InMemoryRateLimiter, InMemoryReceiptWriter, InMemoryEventSink,
+  InMemoryRateLimiter, InMemoryReceiptWriter, SSEBridgeEventSink,
 } from "@kite-stack/provider-kit";
 import type { RoutePolicy } from "@kite-stack/shared-types";
 import { SSEHub } from "@kite-stack/agent-core";
@@ -73,7 +73,7 @@ const enforcer = createRouteEnforcer({
   budgetService: new InMemoryBudgetService(),
   rateLimiter: new InMemoryRateLimiter(),
   receiptWriter: new InMemoryReceiptWriter(),
-  eventSink: new InMemoryEventSink(),
+  eventSink: new SSEBridgeEventSink(sseHub),
   signatureVerifier: new DefaultSignatureVerifier(),
   routeIdResolver: (request) => {
     const routeConfig = request.routeOptions.config as unknown as Record<string, unknown> | undefined;

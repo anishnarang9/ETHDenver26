@@ -169,3 +169,78 @@ export class InMemoryEventSink implements EventSink {
     this.events.push(event);
   }
 }
+
+/* ------------------------------------------------------------------ */
+/*  SSE Bridge – translates enforcement events into SSE messages       */
+/* ------------------------------------------------------------------ */
+
+/** Minimal emitter interface compatible with SSEHub (avoids hard dep on agent-core) */
+export interface SSEEmitter {
+  emit(event: { type: string; agentId: string; payload: Record<string, unknown> }): void;
+}
+
+/** Maps EnforcementEventType → pipeline step number (1-indexed, matching PIPELINE_LABELS) */
+const EVENT_TO_STEP: Record<string, { step: number; name: string }> = {
+  IDENTITY_VERIFIED:   { step: 1, name: "Passport" },
+  PASSPORT_VERIFIED:   { step: 1, name: "Passport" },
+  SESSION_VERIFIED:    { step: 2, name: "Session" },
+  SCOPE_VERIFIED:      { step: 3, name: "Scope" },
+  SERVICE_VERIFIED:    { step: 4, name: "Service" },
+  RATE_LIMIT_VERIFIED: { step: 9, name: "Rate" },
+  BUDGET_VERIFIED:     { step: 8, name: "Budget" },
+  QUOTE_ISSUED:        { step: 6, name: "Quote" },
+  PAYMENT_VERIFIED:    { step: 7, name: "Payment" },
+  RECEIPT_RECORDED:    { step: 10, name: "Receipt" },
+};
+
+/**
+ * EventSink that bridges enforcement events into `enforcement_step` SSE events.
+ * Each step is emitted at most once (deduped by step number).
+ */
+export class SSEBridgeEventSink implements EventSink {
+  private seen = new Set<number>();
+
+  constructor(
+    private hub: SSEEmitter,
+    private agentId = "enforcer",
+  ) {}
+
+  async write(event: EnforcementEvent): Promise<void> {
+    // Handle REQUEST_BLOCKED as a fail on an appropriate step
+    if (event.eventType === "REQUEST_BLOCKED") {
+      const detail = event.details?.["reason"] ?? event.details?.["step"] ?? "blocked";
+      this.hub.emit({
+        type: "enforcement_step",
+        agentId: this.agentId,
+        payload: { step: 0, name: "Blocked", status: "fail", detail: String(detail) },
+      });
+      return;
+    }
+
+    const mapping = EVENT_TO_STEP[event.eventType];
+    if (!mapping || this.seen.has(mapping.step)) return;
+    this.seen.add(mapping.step);
+
+    this.hub.emit({
+      type: "enforcement_step",
+      agentId: this.agentId,
+      payload: {
+        step: mapping.step,
+        name: mapping.name,
+        status: "pass",
+        detail: `${event.eventType} (${event.routeId})`,
+      },
+    });
+
+    // Nonce (step 5) is checked between identity and session –
+    // emit it automatically after IDENTITY_VERIFIED
+    if (event.eventType === "IDENTITY_VERIFIED" && !this.seen.has(5)) {
+      this.seen.add(5);
+      this.hub.emit({
+        type: "enforcement_step",
+        agentId: this.agentId,
+        payload: { step: 5, name: "Nonce", status: "pass", detail: "Nonce accepted" },
+      });
+    }
+  }
+}

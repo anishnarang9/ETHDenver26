@@ -16,7 +16,7 @@ interface Email {
 interface BrowserPanel {
   agentId: string;
   liveViewUrl?: string;
-  status: "standby" | "active" | "closed" | "revoked";
+  status: "standby" | "active" | "closed" | "revoked" | "failed";
   thought?: string;
 }
 
@@ -49,6 +49,7 @@ export interface SpawnedAgentInfo {
   passportTxHash?: string;
   sessionTxHash?: string;
   inboxAddress?: string;
+  needsBrowser?: boolean;
 }
 
 export interface AgentResult {
@@ -234,12 +235,17 @@ function sseReducer(state: SSEState, action: SSEAction): SSEState {
       const p = action.payload.payload;
       const agentId = action.payload.agentId;
       const newStatus = p.status as string;
+      const needsBrowser = p.needsBrowser as boolean | undefined;
       return {
         ...state,
         agentStatuses: { ...state.agentStatuses, [agentId]: newStatus },
         spawnedAgents: state.spawnedAgents.map((a) =>
           a.id === agentId
-            ? { ...a, status: (newStatus as SpawnedAgentInfo["status"]) || a.status }
+            ? {
+                ...a,
+                status: (newStatus as SpawnedAgentInfo["status"]) || a.status,
+                ...(needsBrowser !== undefined ? { needsBrowser } : {}),
+              }
             : a,
         ),
         agentNodes: state.agentNodes.map((n) =>

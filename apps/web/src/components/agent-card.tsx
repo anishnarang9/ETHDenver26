@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle2, Maximize2, X, Monitor } from "lucide-react";
+import { CheckCircle2, Maximize2, X, Monitor, AlertCircle, Mail, Loader2 } from "lucide-react";
 import type { SpawnedAgentInfo } from "../lib/sse-context";
 
 /* ─── Spawn step constants (reused from agent-spawn-timeline) ─── */
@@ -305,6 +305,36 @@ export function AgentCard({
                 <Maximize2 size={10} /> Expand
               </button>
             </>
+          ) : browser?.status === "failed" ? (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                height: "100%",
+                color: "#ef4444",
+                gap: 6,
+              }}
+            >
+              <AlertCircle size={24} />
+              <span style={{ fontSize: "0.7rem" }}>Browser unavailable</span>
+            </div>
+          ) : agent.needsBrowser === false ? (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                height: "100%",
+                color: "#818cf8",
+                gap: 6,
+              }}
+            >
+              <Mail size={24} />
+              <span style={{ fontSize: "0.7rem" }}>No browser — email-only agent</span>
+            </div>
           ) : (
             <div
               style={{
@@ -313,13 +343,13 @@ export function AgentCard({
                 alignItems: "center",
                 justifyContent: "center",
                 height: "100%",
-                color: "#1e293b",
+                color: "#334155",
                 gap: 6,
               }}
             >
-              <Monitor size={24} />
-              <span style={{ fontSize: "0.7rem", color: "#334155" }}>
-                {isFailed ? "Failed" : "Awaiting browser session..."}
+              <Loader2 size={24} style={{ animation: "spin 2s linear infinite" }} />
+              <span style={{ fontSize: "0.7rem" }}>
+                {isFailed ? "Failed" : "Connecting browser..."}
               </span>
             </div>
           )}
