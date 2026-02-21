@@ -1,169 +1,98 @@
+@import "tailwindcss";
+
 :root {
-  --bg: #f5f1e7;
-  --bg-panel: #fff9ef;
-  --ink: #1b1f24;
-  --muted: #596273;
-  --accent: #0f766e;
-  --warn: #b45309;
-  --danger: #b91c1c;
-  --ok: #15803d;
-  --border: #d6cfc2;
+  --bg-0: #0a0f14;
+  --bg-1: #101822;
+  --bg-2: #152232;
+  --line: #243244;
+  --text-0: #eaf2ff;
+  --text-1: #9eb1c8;
+  --accent-cyan: #33d1ff;
+  --accent-lime: #8bff61;
+  --accent-amber: #ffb020;
+  --accent-red: #ff5d6c;
+  --accent-blue: #5e8bff;
+}
+
+@theme inline {
+  --color-bg-0: var(--bg-0);
+  --color-bg-1: var(--bg-1);
+  --color-bg-2: var(--bg-2);
+  --color-line: var(--line);
+  --color-text-0: var(--text-0);
+  --color-text-1: var(--text-1);
+  --color-accent-cyan: var(--accent-cyan);
+  --color-accent-lime: var(--accent-lime);
+  --color-accent-amber: var(--accent-amber);
+  --color-accent-red: var(--accent-red);
+  --color-accent-blue: var(--accent-blue);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-mono);
 }
 
 * {
   box-sizing: border-box;
 }
 
-html,
 body {
   margin: 0;
-  padding: 0;
-  background: radial-gradient(circle at 15% 20%, #fffbf2, #efe4d1 40%, #e9dcc7 100%);
-  color: var(--ink);
-  font-family: "Sora", "Avenir Next", "Segoe UI", sans-serif;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(94, 139, 255, 0.24), transparent 36%),
+    radial-gradient(circle at 90% 10%, rgba(51, 209, 255, 0.17), transparent 38%),
+    linear-gradient(160deg, #070b10 0%, #0a0f14 45%, #0c1520 100%);
+  color: var(--text-0);
+  font-family: var(--font-body), sans-serif;
 }
 
 a {
   color: inherit;
 }
 
-main {
-  min-height: 100vh;
-  padding: 20px;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: 1.3fr 1fr;
-  gap: 16px;
-}
-
 .panel {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 16px;
-  box-shadow: 0 8px 30px rgba(40, 30, 0, 0.08);
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(16, 24, 34, 0.92) 0%, rgba(10, 15, 20, 0.92) 100%);
+  border-radius: 16px;
+  box-shadow:
+    0 24px 48px -36px rgba(0, 0, 0, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-.panel h2 {
-  margin-top: 0;
-  font-size: 1.1rem;
+.mono {
+  font-family: var(--font-mono), monospace;
 }
 
-.form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+.title-font {
+  font-family: var(--font-display), sans-serif;
 }
 
-label {
-  display: block;
-  font-size: 0.78rem;
-  margin-bottom: 4px;
-  color: var(--muted);
+.scanline::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.02),
+      rgba(255, 255, 255, 0.01) 50%,
+      transparent 51%
+    );
+  background-size: 100% 4px;
+  mix-blend-mode: soft-light;
+  opacity: 0.5;
+  z-index: 1;
 }
 
-input,
-textarea,
-button,
-select {
-  width: 100%;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  padding: 10px;
-  font-size: 0.95rem;
-  background: #fffcf5;
+.content-layer {
+  position: relative;
+  z-index: 2;
 }
 
-textarea {
-  min-height: 84px;
-  resize: vertical;
-}
-
-button {
-  cursor: pointer;
-  background: var(--accent);
-  color: white;
-  border: 0;
-}
-
-button.secondary {
-  background: #334155;
-}
-
-button.warn {
-  background: var(--warn);
-}
-
-button.danger {
-  background: var(--danger);
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  font-size: 0.76rem;
-  padding: 5px 10px;
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.badge.warn {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.badge.danger {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.timeline {
-  display: grid;
-  gap: 8px;
-  max-height: 500px;
-  overflow: auto;
-}
-
-.event {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px;
-  background: #fffdf8;
-}
-
-.event strong {
-  font-size: 0.85rem;
-}
-
-.meta {
-  font-size: 0.78rem;
-  color: var(--muted);
-}
-
-.status {
-  font-size: 0.88rem;
-  margin-top: 8px;
-  color: var(--muted);
-}
-
-.topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 14px;
-}
-
-.card-list {
-  display: grid;
-  gap: 10px;
-}
-
-@media (max-width: 940px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
+.data-grid {
+  background-image:
+    linear-gradient(rgba(36, 50, 68, 0.3) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(36, 50, 68, 0.3) 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-position: -1px -1px;
 }

@@ -1,49 +1,63 @@
-"use client";
+import { AgentCard } from "@/components/agent-card";
+import { EventTimeline } from "@/components/event-timeline";
+import { MetricCard } from "@/components/metric-card";
+import { PageHeader } from "@/components/page-header";
+import { PipelineStepper } from "@/components/pipeline-stepper";
+import { TxTable } from "@/components/tx-table";
+import { agents, enforcementSteps, metricCards, missionSummary, timelineEvents, transactions } from "@/lib/mock-data";
 
-import { useState } from "react";
-import { ActionInspector } from "../components/action-inspector";
-import { PassportEditor } from "../components/passport-editor";
-import { TimelinePanel } from "../components/timeline-panel";
-import { WalletConnector } from "../components/wallet-connector";
-
-export default function HomePage() {
-  const [ownerAddress, setOwnerAddress] = useState<string>("");
-  const [agentAddress, setAgentAddress] = useState<string>("");
-  const [lastAction, setLastAction] = useState<string>("No recent actions");
-
+export default function Home() {
   return (
-    <main>
-      <div className="topbar">
-        <div>
-          <h1 style={{ margin: 0 }}>Agent Passport + Policy Vault + x402 Gateway</h1>
-          <div className="meta">Kite testnet dashboard for owner onboarding + external customer agents</div>
-        </div>
-        <span className="badge">Owner Signs, Agent Keeps Keys</span>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Mission Control Dashboard"
+        subtitle="Real-time operational overview across agents, enforcement checks, and settlement flow."
+        badge={{ label: missionSummary.status, tone: "success" }}
+      />
 
-      <div className="grid">
-        <div className="card-list">
-          <WalletConnector onConnected={setOwnerAddress} />
-          <PassportEditor
-            ownerAddress={ownerAddress}
-            onAgentChanged={setAgentAddress}
-            onAction={(message) => setLastAction(message)}
-          />
-          <ActionInspector agentAddress={agentAddress} />
-        </div>
-        <div className="card-list">
-          <div className="panel">
-            <h2>Current Demo State</h2>
-            <div className="meta">Owner: {ownerAddress || "not connected"}</div>
-            <div className="meta">Agent: {agentAddress || "not set"}</div>
-            <div className="status">Last action: {lastAction}</div>
-            <div style={{ marginTop: 10 }}>
-              <span className={agentAddress ? "badge" : "badge warn"}>{agentAddress ? "Passport Target Set" : "Awaiting Agent"}</span>
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {metricCards.map((card) => (
+          <MetricCard key={card.label} label={card.label} value={card.value} delta={card.delta} tone={card.tone} />
+        ))}
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+        <EventTimeline events={timelineEvents} />
+        <div className="panel p-4 md:p-5">
+          <p className="mb-3 text-xs uppercase tracking-[0.18em] text-text-1">Mission Snapshot</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-line bg-bg-2/60 p-3">
+              <p className="text-xs text-text-1">Mission ID</p>
+              <p className="mono mt-1 text-sm">{missionSummary.missionId}</p>
+            </div>
+            <div className="rounded-xl border border-line bg-bg-2/60 p-3">
+              <p className="text-xs text-text-1">Health Score</p>
+              <p className="mono mt-1 text-sm">{missionSummary.healthScore}</p>
+            </div>
+            <div className="rounded-xl border border-line bg-bg-2/60 p-3">
+              <p className="text-xs text-text-1">Spend Today</p>
+              <p className="mono mt-1 text-sm">{missionSummary.spendToday}</p>
+            </div>
+            <div className="rounded-xl border border-line bg-bg-2/60 p-3">
+              <p className="text-xs text-text-1">Active Agents</p>
+              <p className="mono mt-1 text-sm">{missionSummary.activeAgents}</p>
             </div>
           </div>
-          <TimelinePanel agentAddress={agentAddress} />
         </div>
-      </div>
-    </main>
+      </section>
+
+      <PipelineStepper steps={enforcementSteps} failedStep={8} />
+
+      <section>
+        <h2 className="title-font mb-3 text-2xl font-semibold">Active Agents</h2>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {agents.map((agent) => (
+            <AgentCard key={agent.name} {...agent} />
+          ))}
+        </div>
+      </section>
+
+      <TxTable rows={transactions} />
+    </div>
   );
 }
