@@ -1,90 +1,30 @@
 "use client";
 
-import React, { createContext, useContext, useReducer, useCallback, type ReactNode } from "react";
-import { useSSE, type SSEMessage } from "../hooks/use-sse";
+import { createContext, useCallback, useContext, useMemo, useReducer, useRef, type ReactNode } from "react";
+import { useSSE } from "../hooks/use-sse";
+import type {
+  AgentNode,
+  BrowserPanelState,
+  EmailEdge,
+  EmailEvent,
+  EnforcementStep,
+  SSEMessage,
+  SpawnedAgentInfo,
+  TransactionEvent,
+} from "./types";
 
-interface Email {
-  id: string;
-  from: string;
-  to?: string;
-  subject: string;
-  body: string;
-  timestamp: string;
-  agentId: string;
-}
-
-interface BrowserPanel {
-  agentId: string;
-  liveViewUrl?: string;
-  status: "standby" | "active" | "closed" | "revoked" | "failed";
-  thought?: string;
-}
-
-interface EnforcementStep {
-  step: number;
-  name: string;
-  status: "pending" | "pass" | "fail";
-  detail?: string;
-}
-
-interface Transaction {
-  id: string;
-  from: string;
-  to: string;
-  amount: string;
-  method: string;
-  txHash?: string;
-  status: "pending" | "complete" | "failed";
-  timestamp: string;
-}
-
-export interface SpawnedAgentInfo {
-  id: string;
-  role: string;
-  address?: string;
-  status: "spawning" | "active" | "completed" | "failed" | "revoked";
-  step?: string;
-  txHash?: string;
-  fundingTxHash?: string;
-  passportTxHash?: string;
-  sessionTxHash?: string;
-  inboxAddress?: string;
-  needsBrowser?: boolean;
-}
-
-export interface AgentResult {
+interface AgentResult {
   agentId: string;
   role: string;
   result?: string;
   status: "success" | "failed";
 }
 
-/* ---- Graph types ---- */
-
-export interface AgentNode {
-  id: string;
-  role: string;
-  status: "spawning" | "active" | "completed" | "failed";
-  inboxAddress?: string;
-}
-
-export interface EmailEdge {
-  id: string;
-  fromAgentId: string;
-  toAgentId: string;
-  fromAddress: string;
-  toAddress: string;
-  subject: string;
-  body: string;
-  timestamp: number;
-  threadId?: string;
-}
-
-export interface SSEState {
-  emails: Email[];
-  browsers: Record<string, BrowserPanel>;
+interface SSEState {
+  emails: EmailEvent[];
+  browsers: Record<string, BrowserPanelState>;
   enforcementSteps: EnforcementStep[];
-  transactions: Transaction[];
+  transactions: TransactionEvent[];
   thoughts: Record<string, string>;
   agentStatuses: Record<string, string>;
   spawnedAgents: SpawnedAgentInfo[];
@@ -92,15 +32,12 @@ export interface SSEState {
   agentPlan: Array<{ role: string; needsBrowser: boolean; scopes: string[] }>;
   agentResults: AgentResult[];
   synthesisBody?: string;
-  currentRunId?: string;
-  // The human email that triggered the current run
-  incomingEmail?: { from: string; subject: string; body: string };
-  // Graph state
   agentNodes: AgentNode[];
   emailEdges: EmailEdge[];
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
   inboxAddresses: Record<string, string>;
+  currentRunId?: string;
 }
 
 type SSEAction =
@@ -122,8 +59,11 @@ type SSEAction =
   | { type: "AGENT_EMAIL_RECEIVED"; payload: SSEMessage }
   | { type: "AGENT_INBOX_CREATED"; payload: SSEMessage }
   | { type: "ORCHESTRATOR_DECISION"; payload: SSEMessage }
+  | { type: "MERGE_ENFORCEMENT"; steps: EnforcementStep[] }
+  | { type: "SET_SPAWNED_AGENTS"; agents: SpawnedAgentInfo[] }
   | { type: "SELECT_NODE"; nodeId: string | null }
   | { type: "SELECT_EDGE"; edgeId: string | null }
+  | { type: "SET_RUN_ID"; runId?: string }
   | { type: "RESET" };
 
 const initialState: SSEState = {
@@ -144,232 +84,260 @@ const initialState: SSEState = {
   inboxAddresses: {},
 };
 
+function inferRoleFromId(agentId: string): string {
+  if (agentId === "planner") return "orchestrator";
+  if (agentId === "rider" || agentId === "foodie" || agentId === "eventbot") return agentId;
+  return "specialist";
+}
+
+function toBrowserStatus(value: unknown): BrowserPanelState["status"] {
+  if (value === "active" || value === "closed" || value === "revoked" || value === "standby") {
+    return value;
+  }
+  return "active";
+}
+
+function upsertAgentNode(nodes: AgentNode[], patch: Partial<AgentNode> & { id: string }): AgentNode[] {
+  const index = nodes.findIndex((node) => node.id === patch.id);
+  if (index === -1) {
+    return [
+      ...nodes,
+      {
+        id: patch.id,
+        role: patch.role || inferRoleFromId(patch.id),
+        status: patch.status || "spawning",
+        address: patch.address,
+        inboxAddress: patch.inboxAddress,
+      },
+    ];
+  }
+  const next = [...nodes];
+  next[index] = {
+    ...next[index],
+    ...patch,
+    role: patch.role || next[index].role,
+    status: patch.status || next[index].status,
+  };
+  return next;
+}
+
+function upsertSpawnedAgent(state: SSEState, patch: SpawnedAgentInfo): SSEState {
+  const index = state.spawnedAgents.findIndex((agent) => agent.id === patch.id);
+  const merged =
+    index === -1
+      ? [...state.spawnedAgents, patch]
+      : state.spawnedAgents.map((agent, i) => (i === index ? { ...agent, ...patch } : agent));
+
+  return {
+    ...state,
+    spawnedAgents: merged,
+    agentNodes: upsertAgentNode(state.agentNodes, {
+      id: patch.id,
+      role: patch.role,
+      status: patch.status,
+      address: patch.address,
+      inboxAddress: patch.inboxAddress,
+    }),
+  };
+}
+
 function findAgentByInbox(state: SSEState, address: string): string | undefined {
   if (state.inboxAddresses[address]) return state.inboxAddresses[address];
   if (address.includes("planner")) return "planner";
-  const agent = state.spawnedAgents.find((a) => a.inboxAddress === address);
+  const agent = state.spawnedAgents.find((item) => item.inboxAddress === address);
   return agent?.id;
 }
 
-function sseReducer(state: SSEState, action: SSEAction): SSEState {
+function appendEmailAndEdge(
+  state: SSEState,
+  msg: SSEMessage,
+  {
+    from,
+    to,
+    subject,
+    body,
+    threadId,
+  }: { from: string; to?: string; subject: string; body: string; threadId?: string }
+): SSEState {
+  const recipient = to ? findAgentByInbox(state, to) || to : "unknown";
+  const edge: EmailEdge = {
+    id: `edge-${Date.now()}-${Math.random()}`,
+    fromAgentId: msg.agentId,
+    toAgentId: recipient,
+    subject,
+    timestamp: Date.now(),
+    threadId,
+  };
+  const email: EmailEvent = {
+    id: `mail-${Date.now()}-${Math.random()}`,
+    from,
+    to,
+    subject,
+    body,
+    timestamp: new Date().toISOString(),
+    agentId: msg.agentId || "planner",
+  };
+  return {
+    ...state,
+    emails: [...state.emails, email],
+    emailEdges: [...state.emailEdges, edge],
+  };
+}
+
+function reducer(state: SSEState, action: SSEAction): SSEState {
   switch (action.type) {
-    case "EMAIL_RECEIVED": {
-      const p = action.payload.payload;
-      // email_received with agentId "planner" = the human trigger email
-      if (action.payload.agentId === "planner") {
-        return {
-          ...state,
-          incomingEmail: {
-            from: (p.from as string) || "",
-            subject: (p.subject as string) || "",
-            body: (p.body as string) || "",
-          },
-        };
-      }
-      return {
-        ...state,
-        emails: [...state.emails, {
-          id: "email-" + Date.now() + "-" + Math.random(),
-          from: (p.from as string) || action.payload.agentId,
-          to: p.to as string,
-          subject: (p.subject as string) || "",
-          body: (p.body as string) || "",
-          timestamp: new Date().toISOString(),
-          agentId: action.payload.agentId,
-        }],
-      };
-    }
+    case "EMAIL_RECEIVED":
     case "EMAIL_SENT": {
-      const p = action.payload.payload;
-      return {
-        ...state,
-        emails: [...state.emails, {
-          id: "email-" + Date.now() + "-" + Math.random(),
-          from: (p.from as string) || action.payload.agentId,
-          to: p.to as string,
-          subject: (p.subject as string) || "",
-          body: (p.body as string) || "",
-          timestamp: new Date().toISOString(),
-          agentId: action.payload.agentId,
-        }],
-      };
+      const payload = action.payload.payload;
+      return appendEmailAndEdge(state, action.payload, {
+        from: (payload.from as string) || action.payload.agentId,
+        to: payload.to as string | undefined,
+        subject: (payload.subject as string) || "",
+        body: (payload.body as string) || "",
+      });
     }
+    case "AGENT_EMAIL_SENT": {
+      const payload = action.payload.payload;
+      return appendEmailAndEdge(state, action.payload, {
+        from: (payload.from as string) || action.payload.agentId,
+        to: payload.to as string | undefined,
+        subject: (payload.subject as string) || "",
+        body: (payload.body as string) || "",
+        threadId: payload.threadId as string | undefined,
+      });
+    }
+    case "AGENT_EMAIL_RECEIVED":
+    case "ORCHESTRATOR_DECISION":
+      return state;
     case "BROWSER_SESSION": {
-      const p = action.payload.payload;
+      const payload = action.payload.payload;
       const agentId = action.payload.agentId;
+      const status = toBrowserStatus(payload.status);
       return {
         ...state,
         browsers: {
           ...state.browsers,
           [agentId]: {
             agentId,
-            liveViewUrl: (p.liveViewUrl as string) || state.browsers[agentId]?.liveViewUrl,
-            status: (p.status as BrowserPanel["status"]) || "active",
+            liveViewUrl: (payload.liveViewUrl as string) || state.browsers[agentId]?.liveViewUrl,
+            status,
+            sessionId: payload.sessionId as string | undefined,
           },
         },
+        agentNodes: upsertAgentNode(state.agentNodes, { id: agentId, status }),
       };
     }
-    case "LLM_THINKING": {
+    case "LLM_THINKING":
       return {
         ...state,
-        thoughts: { ...state.thoughts, [action.payload.agentId]: action.payload.payload.text as string },
+        thoughts: {
+          ...state.thoughts,
+          [action.payload.agentId]: (action.payload.payload.text as string) || "",
+        },
       };
-    }
     case "ENFORCEMENT_STEP": {
-      const p = action.payload.payload;
+      const payload = action.payload.payload;
       const step: EnforcementStep = {
-        step: (p.step as number) || state.enforcementSteps.length + 1,
-        name: (p.name as string) || (p.eventType as string) || "",
-        status: (p.status as EnforcementStep["status"]) || "pass",
-        detail: p.detail as string,
+        step: (payload.step as number) || state.enforcementSteps.length + 1,
+        name: (payload.name as string) || (payload.eventType as string) || "Unknown",
+        status: (payload.status as EnforcementStep["status"]) || "pass",
+        detail: payload.detail as string,
       };
       return { ...state, enforcementSteps: [...state.enforcementSteps, step] };
     }
     case "PAYMENT_START": {
-      const p = action.payload.payload;
-      return {
-        ...state,
-        transactions: [...state.transactions, {
-          id: "tx-" + Date.now() + "-" + Math.random(),
-          from: action.payload.agentId || "planner",
-          to: (p.target as string) || "",
-          amount: (p.amount as string) || "",
-          method: (p.method as string) || "pending",
-          status: "pending",
-          timestamp: new Date().toISOString(),
-        }],
+      const payload = action.payload.payload;
+      const tx: TransactionEvent = {
+        id: `tx-${Date.now()}-${Math.random()}`,
+        from: action.payload.agentId || "planner",
+        to: (payload.target as string) || "service",
+        amount: (payload.amount as string) || "0",
+        method: (payload.method as string) || "pending",
+        status: "pending",
+        timestamp: new Date().toISOString(),
       };
+      return { ...state, transactions: [...state.transactions, tx] };
     }
     case "PAYMENT_COMPLETE": {
-      const p = action.payload.payload;
+      const payload = action.payload.payload;
       const txs = [...state.transactions];
-      const last = [...txs].reverse().find((t: Transaction) => t.status === "pending");
-      if (last) {
-        last.status = "complete";
-        last.txHash = p.txHash as string;
-        last.method = (p.method as string) || last.method;
-        last.amount = (p.amount as string) || last.amount;
+      const pending = [...txs].reverse().find((tx) => tx.status === "pending");
+      if (pending) {
+        pending.status = "complete";
+        pending.txHash = payload.txHash as string;
+        pending.amount = (payload.amount as string) || pending.amount;
+        pending.method = (payload.method as string) || pending.method;
       }
       return { ...state, transactions: txs };
     }
     case "PAYMENT_FAILED": {
       const txs = [...state.transactions];
-      const last = [...txs].reverse().find((t: Transaction) => t.status === "pending");
-      if (last) last.status = "failed";
+      const pending = [...txs].reverse().find((tx) => tx.status === "pending");
+      if (pending) {
+        pending.status = "failed";
+      }
       return { ...state, transactions: txs };
     }
     case "AGENT_STATUS": {
-      const p = action.payload.payload;
-      const agentId = action.payload.agentId;
-      const newStatus = p.status as string;
-      const needsBrowser = p.needsBrowser as boolean | undefined;
+      const status = (action.payload.payload.status as string) || "idle";
       return {
         ...state,
-        agentStatuses: { ...state.agentStatuses, [agentId]: newStatus },
-        spawnedAgents: state.spawnedAgents.map((a) =>
-          a.id === agentId
-            ? {
-                ...a,
-                status: (newStatus as SpawnedAgentInfo["status"]) || a.status,
-                ...(needsBrowser !== undefined ? { needsBrowser } : {}),
-              }
-            : a,
-        ),
-        agentNodes: state.agentNodes.map((n) =>
-          n.id === agentId
-            ? { ...n, status: (newStatus as AgentNode["status"]) || n.status }
-            : n,
-        ),
+        agentStatuses: { ...state.agentStatuses, [action.payload.agentId]: status },
+        spawnedAgents:
+          action.payload.agentId === "planner"
+            ? state.spawnedAgents
+            : state.spawnedAgents.map((agent) => (agent.id === action.payload.agentId ? { ...agent, status } : agent)),
+        agentNodes: upsertAgentNode(state.agentNodes, {
+          id: action.payload.agentId,
+          role: (action.payload.payload.role as string) || inferRoleFromId(action.payload.agentId),
+          status,
+        }),
       };
     }
     case "AGENT_SPAWNING": {
-      const p = action.payload.payload;
-      const agentId = action.payload.agentId;
-      const existing = state.spawnedAgents.find((a) => a.id === agentId);
-      if (existing) {
-        return {
-          ...state,
-          spawnedAgents: state.spawnedAgents.map((a) =>
-            a.id === agentId
-              ? {
-                  ...a,
-                  step: p.step as string,
-                  txHash: (p.txHash as string) || a.txHash,
-                  address: (p.address as string) || a.address,
-                  fundingTxHash: p.step === "funded" ? (p.txHash as string) : a.fundingTxHash,
-                  passportTxHash: p.step === "passport_deployed" ? (p.txHash as string) : a.passportTxHash,
-                  sessionTxHash: p.step === "session_granted" ? (p.txHash as string) : a.sessionTxHash,
-                  status: p.step === "failed" ? "failed" : a.status,
-                }
-              : a,
-          ),
-        };
-      }
-      const existingNode = state.agentNodes.find((n) => n.id === agentId);
-      return {
-        ...state,
-        spawnedAgents: [
-          ...state.spawnedAgents,
-          {
-            id: agentId,
-            role: p.role as string,
-            address: p.address as string,
-            status: "spawning",
-            step: p.step as string,
-          },
-        ],
-        agentNodes: existingNode
-          ? state.agentNodes
-          : [
-              ...state.agentNodes,
-              {
-                id: agentId,
-                role: (p.role as string) || agentId,
-                status: "spawning" as const,
-              },
-            ],
-      };
+      const payload = action.payload.payload;
+      const step = payload.step as string | undefined;
+      const txHash = payload.txHash as string | undefined;
+      const failed = step === "failed";
+      return upsertSpawnedAgent(state, {
+        id: action.payload.agentId,
+        role: (payload.role as string) || inferRoleFromId(action.payload.agentId),
+        address: payload.address as string | undefined,
+        status: failed ? "failed" : "spawning",
+        step,
+        fundingTxHash: step === "funded" ? txHash : undefined,
+        passportTxHash: step === "passport_deployed" ? txHash : undefined,
+        sessionTxHash: step === "session_granted" ? txHash : undefined,
+      });
     }
     case "AGENT_SPAWNED": {
-      const p = action.payload.payload;
-      const agentId = action.payload.agentId;
+      const payload = action.payload.payload;
+      return upsertSpawnedAgent(state, {
+        id: action.payload.agentId,
+        role: (payload.role as string) || inferRoleFromId(action.payload.agentId),
+        address: payload.address as string | undefined,
+        status: "active",
+        step: "session_granted",
+        fundingTxHash: payload.fundingTxHash as string | undefined,
+        passportTxHash: payload.passportTxHash as string | undefined,
+        sessionTxHash: payload.sessionTxHash as string | undefined,
+      });
+    }
+    case "AGENT_PLAN_CREATED":
       return {
         ...state,
-        spawnedAgents: state.spawnedAgents.map((a) =>
-          a.id === agentId
-            ? {
-                ...a,
-                status: "active" as const,
-                address: (p.address as string) || a.address,
-                fundingTxHash: (p.fundingTxHash as string) || a.fundingTxHash,
-                passportTxHash: (p.passportTxHash as string) || a.passportTxHash,
-                sessionTxHash: (p.sessionTxHash as string) || a.sessionTxHash,
-              }
-            : a,
-        ),
-        agentNodes: state.agentNodes.map((n) =>
-          n.id === agentId ? { ...n, status: "active" as const } : n,
-        ),
+        agentPlan:
+          (action.payload.payload.agents as Array<{ role: string; needsBrowser: boolean; scopes: string[] }>) || [],
       };
-    }
-    case "AGENT_PLAN_CREATED": {
-      const p = action.payload.payload;
+    case "ORCHESTRATOR_PHASE":
       return {
         ...state,
-        agentPlan: (p.agents as SSEState["agentPlan"]) || [],
+        orchestratorPhase: (action.payload.payload.phase as string) || "",
       };
-    }
-    case "ORCHESTRATOR_PHASE": {
-      const p = action.payload.payload;
-      return {
-        ...state,
-        orchestratorPhase: (p.phase as string) || "",
-      };
-    }
     case "AGENT_RESULTS": {
-      const p = action.payload.payload;
-      const results = (p.results as AgentResult[]) || [];
-      const body = (p.synthesisBody as string) || (p.body as string) || undefined;
+      const payload = action.payload.payload;
+      const results = (payload.results as AgentResult[]) || [];
+      const body = (payload.synthesisBody as string) || (payload.body as string) || undefined;
       return {
         ...state,
         agentResults: results.length > 0 ? results : state.agentResults,
@@ -377,67 +345,43 @@ function sseReducer(state: SSEState, action: SSEAction): SSEState {
       };
     }
     case "AGENT_INBOX_CREATED": {
-      const p = action.payload.payload;
-      const agentId = action.payload.agentId;
-      const inboxAddress = p.inboxAddress as string;
+      const payload = action.payload.payload;
+      const inboxAddress = payload.inboxAddress as string;
       return {
         ...state,
-        inboxAddresses: { ...state.inboxAddresses, [inboxAddress]: agentId },
-        spawnedAgents: state.spawnedAgents.map((a) =>
-          a.id === agentId ? { ...a, inboxAddress } : a,
+        inboxAddresses: { ...state.inboxAddresses, [inboxAddress]: action.payload.agentId },
+        spawnedAgents: state.spawnedAgents.map((agent) =>
+          agent.id === action.payload.agentId ? { ...agent, inboxAddress } : agent
         ),
-        agentNodes: state.agentNodes.map((n) =>
-          n.id === agentId ? { ...n, inboxAddress } : n,
+        agentNodes: state.agentNodes.map((node) =>
+          node.id === action.payload.agentId ? { ...node, inboxAddress } : node
         ),
       };
     }
-    case "AGENT_EMAIL_SENT": {
-      const p = action.payload.payload;
-      const senderAgentId = action.payload.agentId;
-      const toAddress = p.to as string;
-      const fromAddress = p.from as string;
-      const recipientAgentId = findAgentByInbox(state, toAddress) || "unknown";
-
-      const edge: EmailEdge = {
-        id: "edge-" + Date.now() + "-" + Math.random(),
-        fromAgentId: senderAgentId,
-        toAgentId: recipientAgentId,
-        fromAddress,
-        toAddress,
-        subject: (p.subject as string) || "",
-        body: (p.body as string) || "",
-        timestamp: Date.now(),
-        threadId: p.threadId as string,
-      };
-
-      return {
-        ...state,
-        emailEdges: [...state.emailEdges, edge],
-        emails: [...state.emails, {
-          id: "email-" + Date.now() + "-" + Math.random(),
-          from: fromAddress || senderAgentId,
-          to: toAddress,
-          subject: (p.subject as string) || "",
-          body: (p.body as string) || "",
-          timestamp: new Date().toISOString(),
-          agentId: senderAgentId,
-        }],
-      };
+    case "MERGE_ENFORCEMENT":
+      return { ...state, enforcementSteps: action.steps };
+    case "SET_SPAWNED_AGENTS": {
+      const nodes = action.agents.reduce<AgentNode[]>(
+        (acc, agent) =>
+          upsertAgentNode(acc, {
+            id: agent.id,
+            role: agent.role,
+            status: agent.status,
+            address: agent.address,
+            inboxAddress: agent.inboxAddress,
+          }),
+        state.agentNodes
+      );
+      return { ...state, spawnedAgents: action.agents, agentNodes: nodes };
     }
-    case "AGENT_EMAIL_RECEIVED": {
-      return state;
-    }
-    case "ORCHESTRATOR_DECISION": {
-      return state;
-    }
-    case "SELECT_NODE": {
+    case "SELECT_NODE":
       return { ...state, selectedNodeId: action.nodeId, selectedEdgeId: null };
-    }
-    case "SELECT_EDGE": {
+    case "SELECT_EDGE":
       return { ...state, selectedEdgeId: action.edgeId, selectedNodeId: null };
-    }
+    case "SET_RUN_ID":
+      return { ...state, currentRunId: action.runId };
     case "RESET":
-      return { ...initialState };
+      return initialState;
     default:
       return state;
   }
@@ -447,52 +391,28 @@ const SSEContext = createContext<{
   state: SSEState;
   dispatch: React.Dispatch<SSEAction>;
   switchUrl: (url: string) => void;
-}>({ state: initialState, dispatch: () => {}, switchUrl: () => {} });
+}>({
+  state: initialState,
+  dispatch: () => undefined,
+  switchUrl: () => undefined,
+});
 
 export function SSEProvider({ url, children }: { url: string; children: ReactNode }) {
-  const [state, dispatch] = useReducer(sseReducer, initialState);
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const currentRunRef = useRef<string | undefined>(undefined);
 
-  const currentRunRef = React.useRef<string | undefined>(undefined);
-
-  // Throttle LLM_THINKING to max 1 dispatch per 800ms per agent to prevent render thrashing
-  const pendingThoughts = React.useRef<Record<string, string>>({});
-  const thoughtTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const flushThoughts = useCallback(() => {
-    const pending = pendingThoughts.current;
-    const keys = Object.keys(pending);
-    if (keys.length === 0) return;
-    for (const agentId of keys) {
-      dispatch({
-        type: "LLM_THINKING",
-        payload: { type: "llm_thinking", agentId, payload: { text: pending[agentId] } },
-      } as SSEAction);
-    }
-    pendingThoughts.current = {};
-  }, []);
-
-  const handleMessage = useCallback((msg: SSEMessage) => {
+  const onMessage = useCallback((msg: SSEMessage) => {
     if (msg.runId && msg.runId !== currentRunRef.current) {
       currentRunRef.current = msg.runId;
       dispatch({ type: "RESET" });
     }
+    dispatch({ type: "SET_RUN_ID", runId: msg.runId });
 
-    // Throttle thinking events — batch and flush every 800ms
-    if (msg.type === "llm_thinking") {
-      pendingThoughts.current[msg.agentId] = (msg.payload.text as string) || "";
-      if (!thoughtTimerRef.current) {
-        thoughtTimerRef.current = setTimeout(() => {
-          thoughtTimerRef.current = null;
-          flushThoughts();
-        }, 800);
-      }
-      return;
-    }
-
-    const typeMap: Record<string, SSEAction["type"]> = {
+    const map: Record<string, SSEAction["type"]> = {
       email_received: "EMAIL_RECEIVED",
       email_sent: "EMAIL_SENT",
       browser_session: "BROWSER_SESSION",
+      llm_thinking: "LLM_THINKING",
       enforcement_step: "ENFORCEMENT_STEP",
       payment_start: "PAYMENT_START",
       payment_complete: "PAYMENT_COMPLETE",
@@ -508,21 +428,19 @@ export function SSEProvider({ url, children }: { url: string; children: ReactNod
       agent_inbox_created: "AGENT_INBOX_CREATED",
       orchestrator_decision: "ORCHESTRATOR_DECISION",
     };
-    const actionType = typeMap[msg.type];
+
+    const actionType = map[msg.type];
     if (actionType) {
       dispatch({ type: actionType, payload: msg } as SSEAction);
     }
-  }, [flushThoughts]);
+  }, []);
 
-  const { switchUrl } = useSSE(url, handleMessage);
-
-  const ctxValue = React.useMemo(() => ({ state, dispatch, switchUrl }), [state, switchUrl]);
-
-  return (
-    <SSEContext.Provider value={ctxValue}>
-      {children}
-    </SSEContext.Provider>
-  );
+  const { switchUrl } = useSSE(url, onMessage);
+  const value = useMemo(() => ({ state, dispatch, switchUrl }), [state, switchUrl]);
+  return <SSEContext.Provider value={value}>{children}</SSEContext.Provider>;
 }
 
 export const useSSEState = () => useContext(SSEContext);
+
+export type { SSEState, SSEAction };
+export type { SpawnedAgentInfo, AgentNode, EmailEdge };
