@@ -261,7 +261,18 @@ export function SetupWizard() {
     const wallets = agentWallets.filter((w) => w.address);
     let allDone = true;
 
+    // Deduplicate addresses — if agents share a wallet, only deploy once
+    const seen = new Map<string, string>(); // address -> txHash from first deploy
     for (const wallet of wallets) {
+      const addr = wallet.address.toLowerCase();
+      if (seen.has(addr)) {
+        setPassportStatuses((prev) => ({
+          ...prev,
+          [wallet.name]: { status: "done", txHash: seen.get(addr) },
+        }));
+        continue;
+      }
+
       setPassportStatuses((prev) => ({
         ...prev,
         [wallet.name]: { status: "pending" },
@@ -276,6 +287,7 @@ export function SetupWizard() {
           scopes: ["travel", "booking", "search"],
           services: ["gateway", "planner"],
         });
+        seen.set(addr, result.txHash);
         setPassportStatuses((prev) => ({
           ...prev,
           [wallet.name]: { status: "done", txHash: result.txHash },
@@ -305,7 +317,19 @@ export function SetupWizard() {
     const wallets = agentWallets.filter((w) => w.address);
     let allDone = true;
 
+    // Deduplicate addresses — if agents share a wallet, only grant once
+    const seen = new Map<string, string>(); // address -> txHash from first grant
     for (const wallet of wallets) {
+      const addr = wallet.address.toLowerCase();
+      if (seen.has(addr)) {
+        // Reuse the result from the first grant with this address
+        setSessionStatuses((prev) => ({
+          ...prev,
+          [wallet.name]: { status: "done", txHash: seen.get(addr) },
+        }));
+        continue;
+      }
+
       setSessionStatuses((prev) => ({
         ...prev,
         [wallet.name]: { status: "pending" },
@@ -317,6 +341,7 @@ export function SetupWizard() {
           expiresAt: Math.floor(Date.now() / 1000) + 86400,
           scopes: ["travel", "booking", "search"],
         });
+        seen.set(addr, result.txHash);
         setSessionStatuses((prev) => ({
           ...prev,
           [wallet.name]: { status: "done", txHash: result.txHash },
