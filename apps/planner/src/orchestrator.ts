@@ -528,13 +528,15 @@ export async function runEmailChainTripPlan(opts: {
     "  Email the orchestrator with the complete itinerary when done.'\n" +
     "- \"ride-researcher\": Searches for rides/transport (needs browser)\n" +
     "- \"restaurant-scout\": Finds restaurants (needs browser)\n" +
-    "- \"event-finder\": Discovers events on lu.ma etc (needs browser)\n" +
+    "- \"event-finder\": Discovers and registers for events on luma (needs browser)\n" +
     "  IMPORTANT: In the event-finder's systemPrompt, include these instructions:\n" +
-    "  'The ETHDenver side-events calendar is at https://lu.ma/ethdenver. Navigate there first.\n" +
-    "   lu.ma is a React SPA — after navigating, use extract_text to read the content.\n" +
-    "   Use scroll_down 3-5 times to load more events (lu.ma uses infinite scroll).\n" +
-    "   Use extract_links with filter \"lu.ma\" to find individual event page URLs.\n" +
-    "   Visit interesting event pages to get full details.'\n\n" +
+    "  'The ETHDenver side-events calendar is at https://luma.com/ethdenver. Navigate there first.\n" +
+    "   Luma is a React SPA — after navigating, use extract_text to read the content.\n" +
+    "   Use scroll_down 3-5 times to load more events (Luma uses infinite scroll).\n" +
+    "   Use extract_links with filter \"lu.ma\" or \"luma.com\" to find individual event page URLs.\n" +
+    "   Visit interesting AI/blockchain event pages to get full details.\n" +
+    "   For events that look relevant, try to REGISTER by clicking the register/RSVP button.\n" +
+    "   Focus on AI agent, DeFi, and blockchain infrastructure side events.'\n\n" +
     "## CRITICAL: Spawn order and collaboration\n" +
     "1. Spawn itinerary-planner FIRST (it plans the trip and coordinates everyone).\n" +
     "2. Then spawn research agents. Each research agent must collaborateWith: [\"itinerary-planner\"].\n" +
