@@ -1,91 +1,78 @@
-# Agent Passport Commerce Stack Architecture
+# TripDesk Architecture
 
 ## Goals
-- Verify autonomous agent identity and delegation.
-- Enforce policy (scope, service allowlist, rate, budget, revocation).
-- Run machine-readable x402-style payment challenge and proof flow.
-- Record receipts on-chain for auditability.
+- Multi-agent trip planning with specialized agents (planner, rider, foodie, eventbot).
+- x402-gated inter-agent calls with policy enforcement.
+- On-chain passport/session guardrails and receipt logging.
+- Real-time mission observability via SSE and console UI.
 
-## Components
+## Core Services
 
-### 1. Web Dashboard (`apps/web`)
-- Passport policy editor (owner -> agent policy).
-- Session grant controls (owner -> session key).
-- Timeline panel backed by gateway event store.
-- Action/passport inspector for demo traceability.
+### 1. Planner (`apps/planner`)
+- Orchestrates trip planning with GPT tool-calling.
+- Receives trigger/webhook input.
+- Calls specialist services via x402 challenge/pay/retry flow.
+- Emits SSE stream (`/api/events`) and replay (`/api/replay/:runId`).
 
-### 2. Enforcement Gateway (`apps/gateway`)
-- Fastify API with priced routes:
-  - `POST /api/enrich-wallet`
-  - `POST /api/premium-intel`
-- Operational routes:
-  - `GET /api/passport/:agent`
-  - `GET /api/actions/:actionId`
-  - `GET /api/timeline/:agent`
-  - `GET /api/timeline/:agent/stream`
-- Uses provider-kit middleware to enforce policy in strict order.
-- Supports runtime route pricing profiles:
-  - `demo`: showcase prices
-  - `test`: low-cost prices for repeated test rounds
-- Includes KITE-only spend guard script for gateway signer operations.
+### 2. Specialists (`apps/rider`, `apps/foodie`, `apps/eventbot`)
+- Expose priced endpoints:
+  - Rider: `POST /api/find-rides`
+  - Foodie: `POST /api/find-restaurants`
+  - EventBot: `POST /api/find-events`, `POST /api/register-event`
+- Use provider-kit enforcer pipeline on each priced route.
+- Emit thought/browser activity events via SSE hub.
 
-Passport/session/revoke writes are executed directly from the web app via wallet signatures to on-chain contracts.
+### 3. Gateway (`apps/gateway`)
+- Shared enforcement API and operational inspection routes.
+- Includes weather/x402 proxy routes and receipt persistence.
+- Persists timeline/action/payment state in Postgres via Prisma.
 
-### 3. Provider Kit (`packages/provider-kit`)
-- Reusable middleware and route policy config.
-- Dual header compatibility:
-  - Legacy `X-PAYMENT*`
-  - x402-style `PAYMENT-*`
-- Challenge generation and proof verification interfaces.
-- Includes in-memory implementations and sample Fastify provider.
+### 4. Web Dashboard (`apps/web`)
+- `/` for passport/session controls and timeline inspection.
+- `/console` for live multi-agent mission view:
+  - browser panels
+  - email thread
+  - enforcement timeline
+  - transaction feed
+  - replay controls
 
-### 4. Contracts (`packages/contracts`)
-- `PassportRegistry.sol`
-- `SessionRegistry.sol`
-- `ReceiptLog.sol`
-- Hardhat deploy script and unit tests.
+### 5. Shared Packages
+- `packages/provider-kit`: route enforcement middleware + interfaces.
+- `packages/agent-core`: LLM loop, Firecrawl helpers, AgentMail/Pieverse clients, SSE hub.
+- `packages/shared-types`: payment headers/protocol types.
+- `packages/db`: Prisma schema/client.
+- `packages/contracts`: PassportRegistry, SessionRegistry, ReceiptLog.
 
-### 5. Runner (`apps/runner`)
-- Simulates autonomous agent loop:
-  - Call priced route.
-  - Receive 402 challenge.
-  - Pay via facilitator.
-  - Fallback to direct ERC20 transfer.
-  - Retry with proof.
-- Adds deterministic controls for route subset selection and loop iterations.
+## Enforcement Pipeline (priced routes)
+1. Verify signed envelope identity.
+2. Verify nonce replay protection.
+3. Verify active delegated session.
+4. Verify passport exists / not revoked / not expired.
+5. Verify scope allowlist.
+6. Verify service allowlist.
+7. Verify rate limits.
+8. Verify budget caps.
+9. Return 402 quote when unpaid.
+10. Verify payment proof.
+11. Record receipt + timeline and serve response.
 
-### 6. Persistence (`packages/db`)
-- Prisma/Postgres schema for timeline, actions, quotes, settlements, receipts, and nonce replay prevention.
+## Runtime Topology (local defaults)
+- Web: `:3000`
+- Gateway: `:4001`
+- Rider: `:4002`
+- Foodie: `:4003`
+- EventBot: `:4004`
+- Planner: `:4005`
 
-## Enforcement Sequence
-1. Verify signed request envelope.
-2. Verify session active and delegated to agent.
-3. Verify passport exists, not revoked, not expired.
-4. Verify route scope and service allowlist.
-5. Check nonce replay.
-6. Check rate limit.
-7. Check per-call and daily budget caps.
-8. If no proof, return 402 challenge payload + dual headers.
-9. Verify payment proof (facilitator first, direct fallback).
-10. Record on-chain receipt and persist timeline event.
-11. Return route response.
+## Data + Audit
+- Policy state lives on-chain (passport/session/receipt contracts).
+- Operational traces and replay events live in Postgres (`packages/db/prisma/schema.prisma`).
+- Replay endpoint reconstructs event timing using recorded offsets.
 
-## Event Model
-- Events written per `actionId` include:
-  - `IDENTITY_VERIFIED`
-  - `SESSION_VERIFIED`
-  - `PASSPORT_VERIFIED`
-  - `SCOPE_VERIFIED`
-  - `SERVICE_VERIFIED`
-  - `RATE_LIMIT_VERIFIED`
-  - `BUDGET_VERIFIED`
-  - `QUOTE_ISSUED`
-  - `PAYMENT_VERIFIED`
-  - `RECEIPT_RECORDED`
-  - `REQUEST_BLOCKED`
+## Legacy Compatibility
+The repository still contains legacy flows for gateway-centered demos:
+- `apps/customer-agent`
+- `apps/weather-fallback-provider`
+- `apps/runner`
 
-## Security Notes
-- Session key signs each request; owner key is not required per request.
-- Nonce table enforces anti-replay per session key.
-- Revocation blocks future calls immediately via on-chain state checks.
-- Receipt log enforces one record per action id (replay protection).
+These can be run independently from the TripDesk console workflow.

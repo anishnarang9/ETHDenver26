@@ -2,6 +2,9 @@ node_modules
 .pnpm-store
 .env
 .env.*
+!.env.example
+!apps/**/.env.example
+!packages/**/.env.example
 dist
 coverage
 .next
@@ -12,5 +15,4 @@ artifacts
 cache
 packages/contracts/typechain-types
 packages/contracts/ignition/deployments
-packages/db/prisma/migrations
 .vercel

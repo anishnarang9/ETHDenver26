@@ -1,32 +1,35 @@
 # Demo Script (5-7 minutes)
 
-## 1. Show Passport State
-- Open dashboard.
-- Show agent, scopes, service allowlist, budget caps.
+## 1. Open Mission Console
+- Open `http://localhost:3000/console`.
+- Point out the three specialist panels (Rider, Foodie, EventBot), transaction feed, and enforcement timeline.
 
-## 2. Show Delegation
-- Grant session key and highlight session expiry.
+## 2. Trigger Planner
+- Click `Plan Trip` (or call planner trigger API).
+- Explain that planner is orchestrating specialists using tool calls.
 
-## 3. Trigger x402
-- Start runner.
-- Explain 402 challenge output:
-  - actionId
-  - amount
-  - asset
-  - payTo
+## 3. Show x402 Agent-to-Agent Calls
+- Highlight each specialist call:
+  - Planner -> Rider (`/api/find-rides`)
+  - Planner -> Foodie (`/api/find-restaurants`)
+  - Planner -> EventBot (`/api/find-events`)
+- Show transaction and enforcement updates in the console.
 
-## 4. Automatic Payment + Retry
-- Show runner paying through facilitator or direct fallback.
-- Show successful retry and response payload.
+## 4. Show Browser + Thought Stream
+- As specialists run, show:
+  - browser session activation
+  - thought updates (`llm_thinking`)
+  - tool calls and returned outputs
 
-## 5. Audit Trail
-- Open action inspector.
-- Show timeline events and receipt references.
-- Open explorer tx link from stored receipt.
+## 5. Show Event Registration Path
+- Trigger registration path via planner (`register_event` through EventBot).
+- Confirm EventBot route `POST /api/register-event` is used and reflected in feed.
 
-## 6. Safety Controls
-- Revoke passport.
-- Run priced call again and show immediate denial.
+## 6. Show Replay
+- Click `Replay Last Run`.
+- Demonstrate event stream replay with original timing.
 
-## 7. Optional Stretch
-- Mention AA path as phase-2 extension with same policy engine.
+## 7. Show Guardrails
+- In dashboard root view, revoke passport for EventBot agent.
+- Back in console, run `post-revoke-test` or `scope-violation`.
+- Explain expected blocked behavior from enforcement pipeline.

@@ -6,6 +6,7 @@
   "license": "MIT",
   "packageManager": "pnpm@9.12.2",
   "scripts": {
+    "dev": "pnpm --parallel --stream --filter @kite-stack/gateway --filter @kite-stack/rider --filter @kite-stack/foodie --filter @kite-stack/eventbot --filter @kite-stack/planner --filter @kite-stack/web dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",

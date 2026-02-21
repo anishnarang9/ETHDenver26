@@ -430,18 +430,31 @@ cd ETHDenver26
 # Install dependencies
 pnpm install
 
-# Set up environment variables
+# Set up environment variables (root + web)
 cp .env.example .env
-# Edit .env with your API keys and contract addresses
+cp apps/web/.env.example apps/web/.env.local
+# Edit both files with your keys + contract addresses
 
 # Set up the database
-pnpm --filter @kite/db db:push
+pnpm db:generate
+pnpm db:migrate
 
 # Deploy contracts (requires Kite testnet funds)
-pnpm --filter @kite/contracts deploy:testnet
+pnpm --filter @kite-stack/contracts deploy:kite-testnet
 
-# Start all services
+# Start core TripDesk services (gateway + rider + foodie + eventbot + planner + web)
 pnpm dev
+```
+
+Run services individually if needed:
+
+```bash
+pnpm dev:gateway
+pnpm dev:rider
+pnpm dev:foodie
+pnpm dev:eventbot
+pnpm dev:planner
+pnpm dev:web
 ```
 
 ### Environment Variables
@@ -459,9 +472,19 @@ SESSION_REGISTRY_ADDRESS=0x...
 RECEIPT_LOG_ADDRESS=0x...
 PAYMENT_ASSET=0x0fF5393387ad2f9f691FD6Fd28e07E3969e27e63
 
-# Agent Keys
-PLANNER_PRIVATE_KEY=0x...
-GATEWAY_SIGNER_KEY=0x...
+# Gateway
+GATEWAY_SIGNER_PRIVATE_KEY=0x...
+PAYMENT_RECIPIENT=0x...
+
+# Planner Keys
+PLANNER_AGENT_PRIVATE_KEY=0x...
+PLANNER_SESSION_PRIVATE_KEY=0x...
+PLANNER_PAYMENT_PRIVATE_KEY=0x...
+
+# Specialist Keys (separate wallets)
+RIDER_AGENT_PRIVATE_KEY=0x...
+FOODIE_AGENT_PRIVATE_KEY=0x...
+EVENTBOT_AGENT_PRIVATE_KEY=0x...
 
 # x402
 FACILITATOR_URL=https://facilitator.pieverse.io
@@ -542,8 +565,8 @@ We welcome contributions! Please see the docs for architecture context before di
 pnpm test
 
 # Run specific package tests
-pnpm --filter @kite/contracts test
-pnpm --filter @kite/provider-kit test
+pnpm --filter @kite-stack/contracts test
+pnpm --filter @kite-stack/provider-kit test
 ```
 
 ---

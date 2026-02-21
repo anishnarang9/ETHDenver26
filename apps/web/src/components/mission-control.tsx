@@ -37,9 +37,15 @@ export function MissionControl({ transactions, plannerUrl }: {
   };
 
   const handleRevoke = async () => {
+    const eventBotAgentAddress = process.env.NEXT_PUBLIC_EVENTBOT_AGENT_ADDRESS;
+    if (!eventBotAgentAddress) {
+      setActionStatus("Set NEXT_PUBLIC_EVENTBOT_AGENT_ADDRESS in apps/web/.env.local");
+      return;
+    }
+
     setActionStatus("Revoking EventBot passport...");
     try {
-      const result = await revokePassportOnchain({ agentAddress: "" }); // Needs real address
+      const result = await revokePassportOnchain({ agentAddress: eventBotAgentAddress });
       setActionStatus(`EventBot revoked! Tx: ${result.txHash.slice(0, 12)}...`);
       setTimeout(() => triggerAction("post-revoke-test"), 2000);
     } catch (err) {
