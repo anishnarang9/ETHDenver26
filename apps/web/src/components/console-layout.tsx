@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useSSEState } from "../lib/sse-context";
 import { AgentNetworkGraph } from "./agent-network-graph";
 import { AgentDetailPanel } from "./agent-detail-panel";
-import { EmailChainView } from "./email-chain-view";
 import { EnforcementPipeline } from "./enforcement-pipeline";
 import { MissionControl } from "./mission-control";
 import { WalletBalances } from "./wallet-balances";

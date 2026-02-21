@@ -137,6 +137,23 @@ export function createAgentMailClient(apiKey: string): AgentMailClient {
       };
     },
 
+    async replyToMessage(opts) {
+      // API: POST /v0/inboxes/{inbox_id}/messages/{message_id}/reply
+      const encodedInbox = encodeURIComponent(opts.inboxId);
+      const encodedMsg = encodeURIComponent(opts.messageId);
+      const res = await fetch(`${baseUrl}/inboxes/${encodedInbox}/messages/${encodedMsg}/reply`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ text: opts.text }),
+      });
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => "");
+        throw new Error(`AgentMail replyToMessage failed: ${res.status} ${errBody}`);
+      }
+      const data = await res.json() as { message_id: string; thread_id: string };
+      return { messageId: data.message_id, threadId: data.thread_id };
+    },
+
     async createWebhook(opts) {
       // API: POST /v0/webhooks
       // Body: { url, eventTypes, inboxIds? }
