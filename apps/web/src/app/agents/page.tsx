@@ -1,6 +1,7 @@
 import { AgentCard } from "@/components/agent-card";
 import { PageHeader } from "@/components/page-header";
 import { agents } from "@/lib/mock-data";
+import { getConfiguredAgentAddresses, getPassport } from "@/lib/backend";
 
 const sessionRows = [
   { key: "0x3A..8f", agent: "planner", expires: "2026-02-21 18:30", state: "active" },
@@ -8,7 +9,31 @@ const sessionRows = [
   { key: "0x00..ff", agent: "foodie", expires: "2026-02-21 13:58", state: "revoked" },
 ];
 
-export default function AgentsPage() {
+export default async function AgentsPage() {
+  const addresses = getConfiguredAgentAddresses();
+  const passportResults = await Promise.all(addresses.slice(0, 5).map((address) => getPassport(address)));
+
+  const liveAgents = passportResults
+    .map((passport, index) => {
+      const address = addresses[index];
+      if (!passport) return null;
+      const revoked = passport.latestSnapshot?.revoked ?? passport.onchain?.revoked ?? false;
+      return {
+        name: `Agent ${address.slice(0, 6)}`,
+        role: "On-chain Policy Subject",
+        state: revoked ? "Revoked" : "Healthy",
+        balance: "n/a",
+        scopes: Array.isArray(passport.latestSnapshot?.scopes)
+          ? (passport.latestSnapshot?.scopes as string[])
+          : Array.isArray(passport.onchain?.scopes)
+            ? (passport.onchain.scopes as string[])
+            : [],
+      };
+    })
+    .filter((agent): agent is NonNullable<typeof agent> => Boolean(agent));
+
+  const displayAgents = liveAgents.length > 0 ? liveAgents : agents;
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -18,7 +43,7 @@ export default function AgentsPage() {
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {agents.map((agent) => (
+        {displayAgents.map((agent) => (
           <AgentCard key={agent.name} {...agent} />
         ))}
       </section>

@@ -1,7 +1,20 @@
 import { PageHeader } from "@/components/page-header";
 import { missionRuns } from "@/lib/mock-data";
+import { getPlannerRuns } from "@/lib/backend";
 
-export default function MissionsPage() {
+export default async function MissionsPage() {
+  const runs = await getPlannerRuns();
+  const runRows =
+    runs.length > 0
+      ? runs.map((run) => ({
+          id: run.runId,
+          status: "Recorded",
+          duration: `${Math.round((run._max?.offsetMs ?? 0) / 1000)}s`,
+          spend: "n/a",
+          date: "latest",
+        }))
+      : missionRuns;
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -23,10 +36,10 @@ export default function MissionsPage() {
                 <th className="px-4 py-3">Duration</th>
                 <th className="px-4 py-3">Spend</th>
                 <th className="px-4 py-3">Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {missionRuns.map((run) => (
+            </tr>
+          </thead>
+          <tbody>
+              {runRows.map((run) => (
                 <tr key={run.id} className="border-t border-line/70">
                   <td className="mono px-4 py-3 md:px-5">{run.id}</td>
                   <td className="px-4 py-3">{run.status}</td>

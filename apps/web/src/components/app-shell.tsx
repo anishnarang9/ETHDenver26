@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import { Bell, Home, LayoutDashboard, Radar, ReceiptText, Settings, ShieldCheck, Sparkles } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { plannerBaseUrl } from "@/lib/backend";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -19,6 +21,7 @@ const navItems = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isLandingPage = pathname === "/";
+  const [triggerState, setTriggerState] = useState<"idle" | "loading" | "done" | "error">("idle");
 
   if (isLandingPage) {
     return (
@@ -27,6 +30,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
+
+  const startMission = async () => {
+    setTriggerState("loading");
+    try {
+      const response = await fetch(`${plannerBaseUrl}/api/trigger`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "plan-trip" }),
+      });
+      if (!response.ok) {
+        throw new Error("trigger failed");
+      }
+      setTriggerState("done");
+      setTimeout(() => setTriggerState("idle"), 2200);
+    } catch {
+      setTriggerState("error");
+      setTimeout(() => setTriggerState("idle"), 2600);
+    }
+  };
 
   return (
     <div className="scanline">
@@ -87,8 +109,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   Alerts
                 </button>
                 <ThemeToggle />
-                <button className="rounded-lg border border-accent-cyan/40 bg-accent-cyan/15 px-3 py-1.5 text-sm text-accent-cyan">
-                  Start Mission
+                <button
+                  onClick={startMission}
+                  className="rounded-lg border border-accent-cyan/40 bg-accent-cyan/15 px-3 py-1.5 text-sm text-accent-cyan"
+                >
+                  {triggerState === "loading"
+                    ? "Starting..."
+                    : triggerState === "done"
+                      ? "Mission Started"
+                      : triggerState === "error"
+                        ? "Start Failed"
+                        : "Start Mission"}
                 </button>
               </div>
             </div>

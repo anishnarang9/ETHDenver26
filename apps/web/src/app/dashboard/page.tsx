@@ -1,12 +1,50 @@
 import { AgentCard } from "@/components/agent-card";
-import { EventTimeline } from "@/components/event-timeline";
+import { LiveEvents, type TimelineRow } from "@/components/live-events";
 import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { PipelineStepper } from "@/components/pipeline-stepper";
 import { TxTable } from "@/components/tx-table";
 import { agents, enforcementSteps, metricCards, missionSummary, timelineEvents, transactions } from "@/lib/mock-data";
+import { getConfiguredAgentAddresses, getGatewayTimeline, getPlannerRuns, type GatewayTimelineEvent } from "@/lib/backend";
 
-export default function DashboardPage() {
+function toTimelineRows(events: GatewayTimelineEvent[]): TimelineRow[] {
+  return events.slice(0, 12).map((event) => ({
+    time: new Date(event.createdAt).toLocaleTimeString("en-US", { hour12: false }),
+    title: event.eventType.toUpperCase(),
+    detail: `action=${event.actionId.slice(0, 10)} route=${event.routeId}`,
+    tone: event.eventType.toLowerCase().includes("error") ? "danger" : "info",
+  }));
+}
+
+function toTransactionRows(events: GatewayTimelineEvent[]) {
+  const paymentRows = events
+    .filter((event) => event.eventType.toLowerCase().includes("payment"))
+    .slice(0, 8)
+    .map((event) => ({
+      id: event.actionId.slice(0, 10),
+      agent: event.agentAddress ?? "agent",
+      counterparty: event.routeId,
+      amount: String(event.detailsJson?.amount ?? "n/a"),
+      status: event.eventType.toLowerCase().includes("verified") ? "Verified" : "Pending",
+      at: new Date(event.createdAt).toISOString().replace("T", " ").slice(0, 19),
+    }));
+
+  return paymentRows.length > 0 ? paymentRows : transactions;
+}
+
+export default async function DashboardPage() {
+  const runs = await getPlannerRuns();
+  const configuredAgents = getConfiguredAgentAddresses();
+  const primaryAgent = configuredAgents[0] ?? "";
+  const gatewayEvents = primaryAgent ? await getGatewayTimeline(primaryAgent) : [];
+  const initialTimeline = gatewayEvents.length ? toTimelineRows(gatewayEvents) : timelineEvents;
+  const txRows = gatewayEvents.length ? toTransactionRows(gatewayEvents) : transactions;
+  const dynamicMetricCards = [...metricCards];
+  if (runs.length > 0) {
+    dynamicMetricCards[0] = { ...dynamicMetricCards[0], value: `${runs.length}`, label: "Recorded Runs" };
+    dynamicMetricCards[1] = { ...dynamicMetricCards[1], value: `${runs[0]?._count?.id ?? 0}`, label: "Events (Latest Run)" };
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -16,13 +54,13 @@ export default function DashboardPage() {
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {metricCards.map((card) => (
+        {dynamicMetricCards.map((card) => (
           <MetricCard key={card.label} label={card.label} value={card.value} delta={card.delta} tone={card.tone} />
         ))}
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
-        <EventTimeline events={timelineEvents} />
+        <LiveEvents initialEvents={initialTimeline} />
         <div className="panel p-4 md:p-5">
           <p className="mb-3 text-xs uppercase tracking-[0.18em] text-text-1">Mission Snapshot</p>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -57,7 +95,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <TxTable rows={transactions} />
+      <TxTable rows={txRows} />
     </div>
   );
 }
