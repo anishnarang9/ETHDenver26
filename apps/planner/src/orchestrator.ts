@@ -88,8 +88,10 @@ function getSpecialistTool(
     return createHireRiderTool(ctx, config.RIDER_URL);
   if ((role.includes("restaurant") || role.includes("food")) && config.FOODIE_URL)
     return createHireFoodieTool(ctx, config.FOODIE_URL);
-  if (role.includes("event") && config.EVENTBOT_URL)
-    return createHireEventBotTool(ctx, config.EVENTBOT_URL);
+  // event-finder intentionally does NOT get hire_eventbot:
+  //   1. It already has browser tools — hiring is redundant.
+  //   2. The event-finder's passport scopes don't include gateway access
+  //      to the eventbot specialist service → SCOPE_FORBIDDEN (403).
   return null;
 }
 
@@ -229,9 +231,27 @@ export async function runEmailChainTripPlan(opts: {
 
       if (opts.signal?.aborted) throw new Error("Agent killed");
 
+      // Auto-inject the scope + service required by each specialist service so
+      // the on-chain passport is authorised before the agent ever calls the API.
+      // Without this the enforcer returns SCOPE_FORBIDDEN / SERVICE_FORBIDDEN.
+      const specialistScopes: string[] = [];
+      const specialistServices: string[] = [];
+      if (role.includes("restaurant") || role.includes("food")) {
+        specialistScopes.push("food");
+        specialistServices.push("foodie");
+      } else if (role.includes("ride") || role.includes("transport")) {
+        specialistScopes.push("transport");
+        specialistServices.push("rider");
+      } else if (role.includes("event")) {
+        specialistScopes.push("events");
+        specialistServices.push("eventbot");
+      }
+      const mergedScopes = [...new Set([...scopes, ...specialistScopes])];
+      const mergedServices = [...new Set(["gateway", "planner", ...specialistServices])];
+
       let spawned;
       try {
-        spawned = await spawner.spawnAgent({ role, scopes });
+        spawned = await spawner.spawnAgent({ role, scopes: mergedScopes, services: mergedServices });
       } catch (err) {
         return { spawned: false, error: (err as Error).message };
       }
@@ -239,7 +259,7 @@ export async function runEmailChainTripPlan(opts: {
       // Emit enforcement steps for the on-chain spawn flow
       emitEnforcement(1, "Passport", `Passport deployed for ${role}`);
       emitEnforcement(2, "Session", `Session granted for ${role}`);
-      emitEnforcement(3, "Scope", `Scopes verified: ${scopes.join(", ")}`);
+      emitEnforcement(3, "Scope", `Scopes verified: ${mergedScopes.join(", ")}`);
 
       let inboxAddress: string | null = null;
       if (inboxPool) {

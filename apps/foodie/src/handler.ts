@@ -45,7 +45,12 @@ export async function handleFindRestaurants(opts: {
     }
   }
 
-  const tools = [];
+  const tools: Array<{
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+    execute: (args: Record<string, unknown>) => Promise<unknown>;
+  }> = [];
 
   if (sessionId && opts.firecrawlApiKey) {
     const apiKey = opts.firecrawlApiKey;
@@ -54,70 +59,128 @@ export async function handleFindRestaurants(opts: {
     tools.push(
       {
         name: "navigate",
-        description: "Navigate to a URL in the browser. Prefer direct Yelp search URLs over Google/Bing.",
+        description:
+          "Navigate to a URL. Use Yelp search URLs for best results, e.g. " +
+          "https://www.yelp.com/search?find_desc=Chinese+food&find_loc=Denver+CO. " +
+          "Avoid Google/Bing — their pages don't render in this browser.",
         parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] },
         execute: async (args: Record<string, unknown>) => {
+          const url = String(args.url ?? "");
           const result = await executeBrowserCode({
-            apiKey, sessionId: sid,
-            code: `await page.goto('${args.url}', { waitUntil: 'domcontentloaded', timeout: 20000 }); await page.waitForTimeout(2000); var _title = await page.title(); _title;`,
+            apiKey,
+            sessionId: sid,
+            code: `
+              await page.goto(${JSON.stringify(url)}, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await page.waitForTimeout(5000);
+              var _title = await page.title();
+              _title;
+            `,
           });
           return { title: result.output };
         },
       },
       {
-        name: "search_text",
-        description: "Type text into a search box and press Enter",
-        parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+        name: "extract_text",
+        description: "Extract visible text from the current page (call after navigate + a brief wait).",
+        parameters: { type: "object", properties: { maxLength: { type: "number" } } },
         execute: async (args: Record<string, unknown>) => {
+          const maxLen = Math.min(Number(args.maxLength) || 5000, 8000);
           const result = await executeBrowserCode({
-            apiKey, sessionId: sid,
-            code: `await page.keyboard.type('${args.text}'); await page.keyboard.press('Enter'); await page.waitForTimeout(4000); var _text = await page.evaluate(() => (document.body.innerText || document.body.textContent || '').substring(0, 3000)); _text;`,
+            apiKey,
+            sessionId: sid,
+            code: `
+              await page.waitForTimeout(2000);
+              var _text = await page.evaluate(() => {
+                var t = document.body.innerText || document.body.textContent || '';
+                return t.replace(/\\s+/g, ' ').trim().substring(0, ${maxLen});
+              });
+              _text;
+            `,
           });
-          return { pageText: result.output };
+          return { text: result.output };
+        },
+      },
+      {
+        name: "scroll_down",
+        description: "Scroll down to load more restaurant listings (Yelp uses lazy loading).",
+        parameters: { type: "object", properties: { times: { type: "number" } } },
+        execute: async (args: Record<string, unknown>) => {
+          const n = Math.min(Number(args.times) || 3, 6);
+          const result = await executeBrowserCode({
+            apiKey,
+            sessionId: sid,
+            code: `
+              for (let i = 0; i < ${n}; i++) {
+                await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+                await page.waitForTimeout(1500);
+              }
+              var _h = await page.evaluate(() => document.body.scrollHeight);
+              String(_h);
+            `,
+          });
+          return { scrollHeight: result.output };
         },
       },
       {
         name: "screenshot",
-        description: "Take a screenshot of the current page",
+        description: "Take a screenshot of the current page for debugging.",
         parameters: { type: "object", properties: {} },
         execute: async () => {
           const result = await executeBrowserCode({
-            apiKey, sessionId: sid,
-            code: `var _screenshot = await page.screenshot({ encoding: 'base64' }); _screenshot;`,
+            apiKey,
+            sessionId: sid,
+            code: `var _s = await page.screenshot({ encoding: 'base64' }); _s;`,
           });
           if (result.screenshot) screenshots.push(result.screenshot);
           return { captured: true };
-        },
-      },
-      {
-        name: "extract_text",
-        description: "Extract visible text from the current page",
-        parameters: { type: "object", properties: { maxLength: { type: "number" } } },
-        execute: async (args: Record<string, unknown>) => {
-          const maxLen = (args.maxLength as number) || 4000;
-          const result = await executeBrowserCode({
-            apiKey, sessionId: sid,
-            code: `await page.waitForTimeout(2000); var _text = await page.evaluate(() => { var t = document.body.innerText || document.body.textContent || ''; return t.replace(/\\s+/g, ' ').trim().substring(0, ${maxLen}); }); _text;`,
-          });
-          return { text: result.output };
         },
       }
     );
   }
 
-  const weatherContext = opts.weather ? `\nCurrent weather: ${opts.weather}. Consider indoor vs outdoor seating accordingly.` : "";
+  const weatherContext = opts.weather
+    ? `\nCurrent weather: ${opts.weather}. Prefer indoor seating options.`
+    : "";
+
+  const systemPrompt = `You are a restaurant research agent. Find dining options matching the request.
+
+## Browser strategy (if you have browser tools)
+1. Navigate to a Yelp search URL. Examples:
+   - https://www.yelp.com/search?find_desc=chinese+restaurants&find_loc=Denver+CO
+   - https://www.yelp.com/search?find_desc=mexican+restaurants&find_loc=Denver+CO
+2. Call extract_text to read the listings (up to 5000 chars).
+3. If the page seems empty, call scroll_down then extract_text again.
+4. Repeat for each cuisine type requested.
+
+## Fallback (if browser unavailable or returns blank)
+Use your training knowledge to list well-known restaurants. Be specific — include real
+addresses, realistic price ranges, and hours. Mark these as "knowledge-based (verify on Maps)".
+
+## Output format
+Return ONLY a JSON object:
+{
+  "restaurants": [
+    {
+      "name": "...",
+      "cuisine": "Chinese|Mexican|...",
+      "rating": "4.2",
+      "priceRange": "$10-15/person",
+      "distance": "0.8 mi from venue",
+      "address": "1234 Main St, Denver, CO",
+      "notes": "Known for X; open until midnight; good for groups"
+    }
+  ]
+}
+Include 6-10 results total (mix of cuisines if requested), with at least 1 late-night option (open past 10 PM).${weatherContext}`;
 
   const result = await runAgentLoop({
     model: "gpt-5.2",
-    systemPrompt: `You are a restaurant research agent. Given a location and preferences, find the best dining options.
-If you have browser tools, use Yelp directly — navigate to URLs like:
-  https://www.yelp.com/search?find_desc=chinese+restaurants&find_loc=Denver+CO
-  https://www.yelp.com/search?find_desc=mexican+restaurants&find_loc=Denver+CO
-Do NOT use Google or Bing — their pages do not render properly in this browser. Yelp works reliably.
-After navigating, call extract_text to read the restaurant listings.${weatherContext}
-Consider ratings, distance, price range, cuisine type, and hours of operation.
-Always return a JSON object with a "restaurants" array containing objects with: name, cuisine, rating, priceRange, distance, address, notes.`,
-    userMessage: `Find restaurants near "${opts.location}" for ${opts.date}.${opts.cuisine ? ` Preferred cuisine: ${opts.cuisine}` : ""}${opts.partySize ? ` Party size: ${opts.partySize}` : ""}`,
+    systemPrompt,
+    userMessage:
+      `Find restaurants near "${opts.location}" for ${opts.date}.` +
+      (opts.cuisine ? ` Preferred cuisine: ${opts.cuisine}.` : "") +
+      (opts.partySize ? ` Party size: ${opts.partySize}.` : "") +
+      ` Budget: $10-15/person. Include Chinese and Mexican options. Include at least 1 late-night spot.`,
     tools,
     onThought: (text) => {
       opts.sseHub.emit({ type: "llm_thinking", agentId: "foodie", payload: { text } });
@@ -130,23 +193,31 @@ Always return a JSON object with a "restaurants" array containing objects with: 
 
   if (sessionId && opts.firecrawlApiKey) {
     closeBrowserSession({ apiKey: opts.firecrawlApiKey, sessionId }).catch(() => {});
-    opts.sseHub.emit({ type: "browser_session", agentId: "foodie", payload: { sessionId, status: "closed" } });
+    opts.sseHub.emit({
+      type: "browser_session",
+      agentId: "foodie",
+      payload: { sessionId, status: "closed" },
+    });
   }
 
   let restaurants: RestaurantResult[] = [];
   try {
-    const parsed = JSON.parse(result.finalAnswer);
+    // Strip markdown fences if the model wrapped the JSON
+    const raw = result.finalAnswer.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+    const parsed = JSON.parse(raw) as { restaurants?: RestaurantResult[] };
     restaurants = parsed.restaurants || [];
   } catch {
-    restaurants = [{
-      name: "Recommended Restaurant",
-      cuisine: "Various",
-      rating: "4.5",
-      priceRange: "$$$",
-      distance: "Nearby",
-      address: opts.location,
-      notes: result.finalAnswer,
-    }];
+    restaurants = [
+      {
+        name: "See notes",
+        cuisine: "Various",
+        rating: "N/A",
+        priceRange: "$10-15",
+        distance: "Near venue",
+        address: opts.location,
+        notes: result.finalAnswer,
+      },
+    ];
   }
 
   return { restaurants, liveViewUrl, screenshots };
