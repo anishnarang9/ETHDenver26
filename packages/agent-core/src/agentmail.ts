@@ -21,6 +21,7 @@ export interface AgentMailClient {
     inReplyTo?: string;
   }): Promise<{ messageId: string; threadId: string }>;
   listThreads(inboxId: string): Promise<Thread[]>;
+  getThread(inboxId: string, threadId: string): Promise<Thread>;
   createWebhook(opts: {
     url: string;
     inboxId: string;
@@ -98,6 +99,37 @@ export function createAgentMailClient(apiKey: string): AgentMailClient {
           createdAt: t.timestamp || "",
         }],
       }));
+    },
+
+    async getThread(inboxId, threadId) {
+      const encodedInbox = encodeURIComponent(inboxId);
+      const encodedThread = encodeURIComponent(threadId);
+      const res = await fetch(`${baseUrl}/inboxes/${encodedInbox}/threads/${encodedThread}`, { headers });
+      if (!res.ok) throw new Error(`AgentMail getThread failed: ${res.status}`);
+      const data = await res.json() as {
+        thread_id: string;
+        subject: string;
+        messages: Array<{
+          message_id: string;
+          from: string;
+          to: string[];
+          subject: string;
+          text: string;
+          timestamp: string;
+        }>;
+      };
+      return {
+        id: data.thread_id,
+        subject: data.subject || "",
+        messages: (data.messages || []).map((m) => ({
+          id: m.message_id,
+          from: m.from,
+          to: m.to?.[0] || "",
+          subject: m.subject || "",
+          body: m.text || "",
+          createdAt: m.timestamp || "",
+        })),
+      };
     },
 
     async createWebhook(opts) {

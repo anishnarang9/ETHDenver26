@@ -44,21 +44,47 @@ const getRequiredAddress = (value: string | undefined, name: string): `0x${strin
   return value as `0x${string}`;
 };
 
-const assertExpectedChain = (expectedChainId: string | undefined, actualChainId: bigint) => {
-  if (!expectedChainId) {
-    return;
-  }
-
-  if (Number(actualChainId) !== Number(expectedChainId)) {
-    throw new Error(`Wrong network in wallet. Expected chainId ${expectedChainId}, got ${actualChainId.toString()}.`);
+const switchOrAddChain = async (ethereum: Eip1193Provider, expectedChainId: string) => {
+  const hexChainId = "0x" + Number(expectedChainId).toString(16);
+  try {
+    await (ethereum as unknown as { request: (args: { method: string; params: unknown[] }) => Promise<void> }).request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: hexChainId }],
+    });
+  } catch (switchErr: unknown) {
+    // Error code 4902 = chain not added yet — try adding it
+    if ((switchErr as { code?: number }).code === 4902) {
+      const rpcUrl = process.env.NEXT_PUBLIC_KITE_RPC_URL || "https://rpc-testnet.gokite.ai/";
+      const explorer = process.env.NEXT_PUBLIC_EXPLORER_BASE_URL || "https://testnet.kitescan.ai";
+      await (ethereum as unknown as { request: (args: { method: string; params: unknown[] }) => Promise<void> }).request({
+        method: "wallet_addEthereumChain",
+        params: [{
+          chainId: hexChainId,
+          chainName: "Kite AI Testnet",
+          nativeCurrency: { name: "KITE", symbol: "KITE", decimals: 18 },
+          rpcUrls: [rpcUrl],
+          blockExplorerUrls: [explorer],
+        }],
+      });
+    } else {
+      throw switchErr;
+    }
   }
 };
 
 const getSigner = async (): Promise<JsonRpcSigner> => {
-  const provider = new BrowserProvider(getEthereum());
+  const ethereum = getEthereum();
+  const provider = new BrowserProvider(ethereum);
   const expectedChainId = process.env.NEXT_PUBLIC_CHAIN_ID;
   const network = await provider.getNetwork();
-  assertExpectedChain(expectedChainId, network.chainId);
+
+  if (expectedChainId && Number(network.chainId) !== Number(expectedChainId)) {
+    // Auto-switch to the correct chain
+    await switchOrAddChain(ethereum, expectedChainId);
+    // Re-create provider after chain switch
+    const newProvider = new BrowserProvider(ethereum);
+    return newProvider.getSigner();
+  }
 
   return provider.getSigner();
 };
@@ -74,7 +100,7 @@ const buildExplorerLink = (txHash: string): string | null => {
 export const onchainTestUtils = {
   getEthereum,
   getRequiredAddress,
-  assertExpectedChain,
+  switchOrAddChain,
   buildExplorerLink,
 };
 

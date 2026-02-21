@@ -48,8 +48,9 @@ export function createWeatherTool(opts: {
           if (!offer) throw new Error("402 response has no payment offer");
 
           // Step 3: Direct ERC20 transfer to the weather service
+          // Use 0.001 token (18 decimals) instead of the full maxAmountRequired
           const payTo = offer.payTo;
-          const amount = BigInt(offer.maxAmountRequired);
+          const amount = BigInt("1000000000000000"); // 0.001 tokens (18 decimals)
           const asset = offer.asset || opts.paymentAsset;
 
           const token = new Contract(asset, ERC20_ABI, opts.paymentWallet.connect(opts.provider));

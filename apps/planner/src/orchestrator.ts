@@ -39,6 +39,7 @@ export async function runDynamicTripPlan(opts: {
   sseHub: SSEHub;
   config: PlannerEnv;
   plannerInboxAddress?: string;
+  signal?: AbortSignal;
 }): Promise<void> {
   const provider = new JsonRpcProvider(opts.config.KITE_RPC_URL);
   const paymentWallet = new Wallet(opts.config.PLANNER_PAYMENT_PRIVATE_KEY, provider);
@@ -124,7 +125,10 @@ Each agent gets a real on-chain wallet, passport, and optional browser session. 
     },
     apiKey: opts.config.OPENAI_API_KEY,
     maxIterations: 5,
+    signal: opts.signal,
   });
+
+  if (opts.signal?.aborted) throw new Error("Agent killed");
 
   if (manifest.length === 0) {
     // Fallback: create a default set of agents
@@ -183,6 +187,7 @@ Each agent gets a real on-chain wallet, passport, and optional browser session. 
   const spawnedMap = new Map<string, { agentId: string; role: string; entry: AgentManifestEntry }>();
 
   for (const entry of manifest) {
+    if (opts.signal?.aborted) throw new Error("Agent killed");
     try {
       const spawned = await spawner.spawnAgent({ role: entry.role, scopes: entry.scopes });
       spawnedMap.set(spawned.id, { agentId: spawned.id, role: entry.role, entry });
@@ -258,6 +263,7 @@ Each agent gets a real on-chain wallet, passport, and optional browser session. 
           },
           apiKey: opts.config.OPENAI_API_KEY,
           maxIterations: 12,
+          signal: opts.signal,
         });
 
         // Cleanup browser session
@@ -292,6 +298,8 @@ Each agent gets a real on-chain wallet, passport, and optional browser session. 
   /* ---------------------------------------------------------------- */
   /*  Phase 4: Synthesis — compile results into itinerary              */
   /* ---------------------------------------------------------------- */
+
+  if (opts.signal?.aborted) throw new Error("Agent killed");
 
   opts.sseHub.emit({
     type: "orchestrator_phase",
@@ -332,6 +340,7 @@ IMPORTANT: The recipient email is: ${opts.humanEmail.from}`,
     },
     apiKey: opts.config.OPENAI_API_KEY,
     maxIterations: 5,
+    signal: opts.signal,
   });
 
   opts.sseHub.emit({

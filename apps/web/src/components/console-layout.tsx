@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useSSEState } from "../lib/sse-context";
 import { AgentCard } from "./agent-card";
 import { OrchestratorPhaseBanner } from "./orchestrator-phase-banner";
@@ -9,8 +10,8 @@ import { EnforcementPipeline } from "./enforcement-pipeline";
 import { MissionControl } from "./mission-control";
 import { WalletBalances } from "./wallet-balances";
 import { ReplayButton } from "./replay-button";
-import { AnimatePresence } from "framer-motion";
-import { Mail, Shield, Command, Users, Zap } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Mail, Shield, Command, Users, Zap, OctagonX } from "lucide-react";
 
 const plannerWallet = [
   { name: "Planner (Orchestrator)", address: process.env.NEXT_PUBLIC_PLANNER_ADDRESS || "", color: "#3b82f6" },
@@ -29,10 +30,32 @@ const sectionHeaderStyle: React.CSSProperties = {
 };
 
 export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
-  const { state } = useSSEState();
+  const { state, dispatch } = useSSEState();
+  const [killing, setKilling] = useState(false);
 
   const agentCount = state.spawnedAgents.length;
   const gridCols = agentCount <= 1 ? 1 : agentCount <= 3 ? agentCount : 3;
+
+  const isRunning =
+    !!state.orchestratorPhase &&
+    state.orchestratorPhase !== "completed" &&
+    state.orchestratorPhase !== "killed";
+
+  const handleKill = async () => {
+    setKilling(true);
+    try {
+      await fetch(`${plannerUrl}/api/kill`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      dispatch({ type: "RESET" });
+    } catch {
+      // Even if the backend is unreachable, reset the frontend
+      dispatch({ type: "RESET" });
+    } finally {
+      setKilling(false);
+    }
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#e2e8f0", fontFamily: "'Inter', sans-serif" }}>
@@ -85,7 +108,45 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
             </span>
           )}
         </div>
-        <ReplayButton plannerUrl={plannerUrl} />
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {/* Kill All button — visible when a run is active */}
+          <AnimatePresence>
+            {isRunning && (
+              <motion.button
+                initial={{ opacity: 0, scale: 0.9, x: 10 }}
+                animate={{ opacity: 1, scale: 1, x: 0 }}
+                exit={{ opacity: 0, scale: 0.9, x: 10 }}
+                transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                onClick={handleKill}
+                disabled={killing}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  border: "1px solid #ef444480",
+                  background: "linear-gradient(135deg, #dc2626, #b91c1c)",
+                  color: "#fff",
+                  fontWeight: 700,
+                  fontSize: "0.78rem",
+                  cursor: killing ? "not-allowed" : "pointer",
+                  fontFamily: "inherit",
+                  opacity: killing ? 0.6 : 1,
+                  boxShadow: "0 0 20px rgba(239,68,68,0.25), inset 0 1px 0 rgba(255,255,255,0.1)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                <OctagonX size={14} />
+                {killing ? "Killing..." : "Kill All"}
+              </motion.button>
+            )}
+          </AnimatePresence>
+
+          <ReplayButton plannerUrl={plannerUrl} />
+        </div>
       </div>
 
       {/* ═══ Phase Banner ═══ */}

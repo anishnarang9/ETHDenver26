@@ -36,6 +36,12 @@ const dbWriter: RunEventWriter = {
 
 let currentHub = new SSEHub({ dbWriter });
 
+// Global abort controller — aborted by /api/kill, replaced on each new run
+let currentAbortController = new AbortController();
+export function getCurrentSignal(): AbortSignal {
+  return currentAbortController.signal;
+}
+
 // Track spawned agents across runs for the /api/agents endpoint
 const spawnedAgentsRef: { current: SpawnedAgent[] } = { current: [] };
 export function setSpawnedAgents(agents: SpawnedAgent[]) {
@@ -111,8 +117,12 @@ app.post("/api/webhook/email", async (request) => {
     body: body.body || body.text || "Plan my trip",
   };
 
+  currentAbortController.abort();
+  currentAbortController = new AbortController();
+
   currentHub.newRun();
-  runDynamicTripPlan({ humanEmail, sseHub: currentHub, config, plannerInboxAddress: mailAddresses?.plannerInbox.address }).catch((err) => {
+  runDynamicTripPlan({ humanEmail, sseHub: currentHub, config, plannerInboxAddress: mailAddresses?.plannerInbox.address, signal: currentAbortController.signal }).catch((err) => {
+    if ((err as Error).message === "Agent killed") return;
     app.log.error(err, "Trip planning failed");
     currentHub.emit({ type: "error", agentId: "planner", payload: { message: (err as Error).message } });
   });
@@ -146,13 +156,35 @@ app.post("/api/trigger", async (request) => {
     humanEmail.body = "Register me for one more event on Luma.";
   }
 
+  // Abort any existing run, start fresh
+  currentAbortController.abort();
+  currentAbortController = new AbortController();
+
   currentHub.newRun();
-  runDynamicTripPlan({ humanEmail, sseHub: currentHub, config, plannerInboxAddress: mailAddresses?.plannerInbox.address }).catch((err) => {
+  runDynamicTripPlan({ humanEmail, sseHub: currentHub, config, plannerInboxAddress: mailAddresses?.plannerInbox.address, signal: currentAbortController.signal }).catch((err) => {
+    if ((err as Error).message === "Agent killed") {
+      app.log.info("Run killed by user");
+      return;
+    }
     app.log.error(err, "Trip planning failed");
     currentHub.emit({ type: "error", agentId: "planner", payload: { message: (err as Error).message } });
   });
 
   return { ok: true, runId: currentHub.runId, action };
+});
+
+// Kill all agents — aborts the current run
+app.post("/api/kill", async () => {
+  currentAbortController.abort();
+  currentAbortController = new AbortController();
+
+  currentHub.emit({
+    type: "orchestrator_phase",
+    agentId: "planner",
+    payload: { phase: "killed", message: "All agents killed by operator." },
+  });
+
+  return { ok: true, killed: true };
 });
 
 // Expose inbox addresses for the dashboard
