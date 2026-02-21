@@ -243,6 +243,11 @@ export async function runEmailChainTripPlan(opts: {
           browserCleanup = browserResult.cleanup;
         } catch (err) {
           console.warn("[orchestrator] Browser setup failed for " + role + ":", (err as Error).message);
+          opts.sseHub.emit({
+            type: "browser_session",
+            agentId: spawned.id,
+            payload: { status: "failed" },
+          });
         }
       }
 
@@ -280,28 +285,36 @@ export async function runEmailChainTripPlan(opts: {
         .map((r) => "- Coordinate with " + r + " at " + agentDirectory[r] + " -- share relevant findings via email.")
         .join("\n");
 
+      const collabAddresses = collaborateWith
+        .filter((r) => agentDirectory[r])
+        .map((r) => r + ": " + agentDirectory[r]);
+
       const fullSystemPrompt = systemPrompt + "\n\n" +
         "## Agent Email Directory\n" +
         "You have a real email inbox at: " + (inboxAddress || "not available") + "\n" +
         "The following agents are available to email:\n" +
         buildDirectoryString() + "\n\n" +
-        "## Communication Protocol\n" +
-        "1. Complete your assigned task using available tools.\n" +
-        "2. When done, email your results to the orchestrator at: " + emailTo + "\n" +
-        "   Use send_email with a clear subject line and your findings in the body.\n" +
-        "3. You can also email other agents to request information or share findings.\n" +
-        "4. Use check_inbox to see if other agents have sent you information.\n" +
-        "5. Use reply_to_thread to continue an existing email conversation.\n" +
-        "6. Also call report_results with a JSON summary as backup.\n" +
-        (collabLines ? "\n## Collaboration\n" + collabLines + "\n" : "") +
-        "IMPORTANT: Be thorough but efficient. You have a limited number of iterations.";
+        "## MANDATORY Communication Protocol\n" +
+        "1. FIRST: Call check_inbox — other agents may have already sent you data.\n" +
+        "2. Do your research using your tools (browser, hire, etc.).\n" +
+        "3. REQUIRED: For each agent in your collaboration list below, call send_email\n" +
+        "   with your findings so they can use your data. This is NOT optional.\n" +
+        "4. Call check_inbox again — read and incorporate any data from collaborators.\n" +
+        "5. Email your FINAL compiled results to the orchestrator at: " + emailTo + "\n" +
+        "6. Call report_results as backup.\n\n" +
+        "You MUST send at least one email to each collaborator before finishing.\n" +
+        (collabAddresses.length > 0
+          ? "\n## Your Collaborators (MUST email each one)\n" +
+            collabAddresses.map((c) => "- " + c).join("\n") + "\n"
+          : "") +
+        "\nIMPORTANT: Be thorough but efficient. You have a limited number of iterations.";
 
       const agentPromise = (async (): Promise<string> => {
         try {
           opts.sseHub.emit({
             type: "agent_status",
             agentId: spawned.id,
-            payload: { status: "active", role },
+            payload: { status: "active", role, needsBrowser },
           });
 
           const result = await runAgentLoop({
@@ -452,28 +465,51 @@ export async function runEmailChainTripPlan(opts: {
 
   const orchestratorSystemPrompt =
     "You are TripDesk Orchestrator -- a coordinator that spawns specialist agents who communicate via email.\n\n" +
-    "## Your workflow:\n" +
+    "## Your workflow (FOLLOW THIS EXACT ORDER):\n" +
     "1. Call get_weather to check weather at the destination.\n" +
-    "2. Use spawn_agent to create 2-4 specialist agents. Each gets a real on-chain wallet, passport, and email inbox.\n" +
-    "   - Use the collaborateWith parameter to tell agents which other agents they should coordinate with.\n" +
-    "   - For example, the itinerary-compiler should collaborateWith [\"ride-researcher\", \"restaurant-scout\", \"event-finder\"].\n" +
-    "3. Call wait_for_agents to wait for them to finish.\n" +
-    "4. Call check_orchestrator_inbox to read their emailed reports.\n" +
-    "5. Compile the results and call email_human to send the final itinerary to the requester.\n\n" +
+    "2. FIRST, spawn an \"itinerary-planner\" agent. This agent plans the overall trip structure,\n" +
+    "   creates a day-by-day skeleton itinerary, and coordinates the research agents.\n" +
+    "   It does NOT need a browser. Give it the full trip request details.\n" +
+    "3. THEN spawn 2-3 research agents (ride-researcher, restaurant-scout, event-finder)\n" +
+    "   that do the actual searching. They all collaborateWith the itinerary-planner.\n" +
+    "4. Call wait_for_agents to wait for them to finish.\n" +
+    "5. Call check_orchestrator_inbox to read their emailed reports.\n" +
+    "6. Compile the results and call email_human to send the final itinerary to the requester.\n\n" +
     "## Agent types you can spawn:\n" +
+    "- \"itinerary-planner\" (SPAWN FIRST): Plans the overall trip structure and day-by-day schedule.\n" +
+    "  No browser needed. Receives research from other agents via email and compiles the itinerary.\n" +
+    "  Its systemPrompt should say: 'You are a trip itinerary planner. Create a detailed day-by-day\n" +
+    "  schedule based on the trip request. Email the other research agents to request specific info.\n" +
+    "  Wait for their replies via check_inbox, then compile everything into a final itinerary.\n" +
+    "  Email the orchestrator with the complete itinerary when done.'\n" +
     "- \"ride-researcher\": Searches for rides/transport (needs browser)\n" +
     "- \"restaurant-scout\": Finds restaurants (needs browser)\n" +
     "- \"event-finder\": Discovers events on lu.ma etc (needs browser)\n" +
-    "- \"itinerary-compiler\": Compiles results from other agents (no browser needed)\n\n" +
+    "  IMPORTANT: In the event-finder's systemPrompt, include these instructions:\n" +
+    "  'The ETHDenver side-events calendar is at https://lu.ma/ethdenver. Navigate there first.\n" +
+    "   lu.ma is a React SPA — after navigating, use extract_text to read the content.\n" +
+    "   Use scroll_down 3-5 times to load more events (lu.ma uses infinite scroll).\n" +
+    "   Use extract_links with filter \"lu.ma\" to find individual event page URLs.\n" +
+    "   Visit interesting event pages to get full details.'\n\n" +
+    "## CRITICAL: Spawn order and collaboration\n" +
+    "1. Spawn itinerary-planner FIRST (it plans the trip and coordinates everyone).\n" +
+    "2. Then spawn research agents. Each research agent must collaborateWith: [\"itinerary-planner\"].\n" +
+    "3. itinerary-planner must collaborateWith ALL research agents.\n" +
+    "Example spawn order:\n" +
+    "  1st: itinerary-planner → collaborateWith: [\"ride-researcher\", \"restaurant-scout\", \"event-finder\"]\n" +
+    "  2nd: ride-researcher → collaborateWith: [\"itinerary-planner\"]\n" +
+    "  3rd: restaurant-scout → collaborateWith: [\"itinerary-planner\"]\n" +
+    "  4th: event-finder → collaborateWith: [\"itinerary-planner\"]\n\n" +
     "## Agent Communication:\n" +
-    "- Each agent gets its own email inbox and can send/receive emails to/from any other agent.\n" +
-    "- Agents can email you (the orchestrator) and each other directly.\n" +
-    "- After spawning all agents, they will work autonomously and email their results.\n" +
+    "- Each agent gets its own email inbox and MUST send emails to collaborators.\n" +
+    "- The itinerary-planner is the hub — it emails research agents with specific requests\n" +
+    "  and they email back their findings.\n" +
+    "- After spawning all agents, they work autonomously via email.\n" +
     "- The agent directory is shared so they know each other's addresses.\n\n" +
     "## Important:\n" +
-    "- Be efficient -- only spawn agents that are truly needed.\n" +
-    "- After waiting, ALWAYS check your inbox for their reports before synthesizing.\n" +
-    "- The final email to the human should be a beautiful, organized itinerary.";
+    "- ALWAYS spawn itinerary-planner first. It is the brain of the trip.\n" +
+    "- After waiting, ALWAYS check your inbox for the itinerary-planner's compiled report.\n" +
+    "- The final email_human should forward the itinerary-planner's compiled itinerary to the human.";
 
   await runAgentLoop({
     model: "gpt-5.2",
