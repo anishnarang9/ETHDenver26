@@ -208,6 +208,25 @@ textarea {
   background-size: 200px 200px;
 }
 
+/* ============ Agent network graph keyframes ============ */
+
+@keyframes node-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.02); }
+}
+
+@keyframes edge-glow {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes email-particle {
+  0% { transform: translateX(0); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateX(100%); opacity: 0; }
+}
+
 @media (max-width: 940px) {
   .grid {
     grid-template-columns: 1fr;

@@ -48,6 +48,7 @@ export interface SpawnedAgentInfo {
   fundingTxHash?: string;
   passportTxHash?: string;
   sessionTxHash?: string;
+  inboxAddress?: string;
 }
 
 export interface AgentResult {
@@ -57,7 +58,28 @@ export interface AgentResult {
   status: "success" | "failed";
 }
 
-interface SSEState {
+/* ---- Graph types ---- */
+
+export interface AgentNode {
+  id: string;
+  role: string;
+  status: "spawning" | "active" | "completed" | "failed";
+  inboxAddress?: string;
+}
+
+export interface EmailEdge {
+  id: string;
+  fromAgentId: string;
+  toAgentId: string;
+  fromAddress: string;
+  toAddress: string;
+  subject: string;
+  body: string;
+  timestamp: number;
+  threadId?: string;
+}
+
+export interface SSEState {
   emails: Email[];
   browsers: Record<string, BrowserPanel>;
   enforcementSteps: EnforcementStep[];
@@ -70,6 +92,12 @@ interface SSEState {
   agentResults: AgentResult[];
   synthesisBody?: string;
   currentRunId?: string;
+  // Graph state
+  agentNodes: AgentNode[];
+  emailEdges: EmailEdge[];
+  selectedNodeId: string | null;
+  selectedEdgeId: string | null;
+  inboxAddresses: Record<string, string>;
 }
 
 type SSEAction =
@@ -87,6 +115,12 @@ type SSEAction =
   | { type: "AGENT_PLAN_CREATED"; payload: SSEMessage }
   | { type: "ORCHESTRATOR_PHASE"; payload: SSEMessage }
   | { type: "AGENT_RESULTS"; payload: SSEMessage }
+  | { type: "AGENT_EMAIL_SENT"; payload: SSEMessage }
+  | { type: "AGENT_EMAIL_RECEIVED"; payload: SSEMessage }
+  | { type: "AGENT_INBOX_CREATED"; payload: SSEMessage }
+  | { type: "ORCHESTRATOR_DECISION"; payload: SSEMessage }
+  | { type: "SELECT_NODE"; nodeId: string | null }
+  | { type: "SELECT_EDGE"; edgeId: string | null }
   | { type: "RESET" };
 
 const initialState: SSEState = {
@@ -100,7 +134,19 @@ const initialState: SSEState = {
   orchestratorPhase: "",
   agentPlan: [],
   agentResults: [],
+  agentNodes: [{ id: "planner", role: "orchestrator", status: "active" }],
+  emailEdges: [],
+  selectedNodeId: null,
+  selectedEdgeId: null,
+  inboxAddresses: {},
 };
+
+function findAgentByInbox(state: SSEState, address: string): string | undefined {
+  if (state.inboxAddresses[address]) return state.inboxAddresses[address];
+  if (address.includes("planner")) return "planner";
+  const agent = state.spawnedAgents.find((a) => a.inboxAddress === address);
+  return agent?.id;
+}
 
 function sseReducer(state: SSEState, action: SSEAction): SSEState {
   switch (action.type) {
@@ -110,7 +156,7 @@ function sseReducer(state: SSEState, action: SSEAction): SSEState {
       return {
         ...state,
         emails: [...state.emails, {
-          id: `email-${Date.now()}-${Math.random()}`,
+          id: "email-" + Date.now() + "-" + Math.random(),
           from: (p.from as string) || action.payload.agentId,
           to: p.to as string,
           subject: (p.subject as string) || "",
@@ -156,7 +202,7 @@ function sseReducer(state: SSEState, action: SSEAction): SSEState {
       return {
         ...state,
         transactions: [...state.transactions, {
-          id: `tx-${Date.now()}-${Math.random()}`,
+          id: "tx-" + Date.now() + "-" + Math.random(),
           from: action.payload.agentId || "planner",
           to: (p.target as string) || "",
           amount: (p.amount as string) || "",
@@ -185,13 +231,21 @@ function sseReducer(state: SSEState, action: SSEAction): SSEState {
       return { ...state, transactions: txs };
     }
     case "AGENT_STATUS": {
+      const p = action.payload.payload;
+      const agentId = action.payload.agentId;
+      const newStatus = p.status as string;
       return {
         ...state,
-        agentStatuses: { ...state.agentStatuses, [action.payload.agentId]: action.payload.payload.status as string },
+        agentStatuses: { ...state.agentStatuses, [agentId]: newStatus },
         spawnedAgents: state.spawnedAgents.map((a) =>
-          a.id === action.payload.agentId
-            ? { ...a, status: (action.payload.payload.status as SpawnedAgentInfo["status"]) || a.status }
+          a.id === agentId
+            ? { ...a, status: (newStatus as SpawnedAgentInfo["status"]) || a.status }
             : a,
+        ),
+        agentNodes: state.agentNodes.map((n) =>
+          n.id === agentId
+            ? { ...n, status: (newStatus as AgentNode["status"]) || n.status }
+            : n,
         ),
       };
     }
@@ -218,6 +272,7 @@ function sseReducer(state: SSEState, action: SSEAction): SSEState {
           ),
         };
       }
+      const existingNode = state.agentNodes.find((n) => n.id === agentId);
       return {
         ...state,
         spawnedAgents: [
@@ -230,6 +285,16 @@ function sseReducer(state: SSEState, action: SSEAction): SSEState {
             step: p.step as string,
           },
         ],
+        agentNodes: existingNode
+          ? state.agentNodes
+          : [
+              ...state.agentNodes,
+              {
+                id: agentId,
+                role: (p.role as string) || agentId,
+                status: "spawning" as const,
+              },
+            ],
       };
     }
     case "AGENT_SPAWNED": {
@@ -248,6 +313,9 @@ function sseReducer(state: SSEState, action: SSEAction): SSEState {
                 sessionTxHash: (p.sessionTxHash as string) || a.sessionTxHash,
               }
             : a,
+        ),
+        agentNodes: state.agentNodes.map((n) =>
+          n.id === agentId ? { ...n, status: "active" as const } : n,
         ),
       };
     }
@@ -274,6 +342,66 @@ function sseReducer(state: SSEState, action: SSEAction): SSEState {
         agentResults: results.length > 0 ? results : state.agentResults,
         synthesisBody: body || state.synthesisBody,
       };
+    }
+    case "AGENT_INBOX_CREATED": {
+      const p = action.payload.payload;
+      const agentId = action.payload.agentId;
+      const inboxAddress = p.inboxAddress as string;
+      return {
+        ...state,
+        inboxAddresses: { ...state.inboxAddresses, [inboxAddress]: agentId },
+        spawnedAgents: state.spawnedAgents.map((a) =>
+          a.id === agentId ? { ...a, inboxAddress } : a,
+        ),
+        agentNodes: state.agentNodes.map((n) =>
+          n.id === agentId ? { ...n, inboxAddress } : n,
+        ),
+      };
+    }
+    case "AGENT_EMAIL_SENT": {
+      const p = action.payload.payload;
+      const senderAgentId = action.payload.agentId;
+      const toAddress = p.to as string;
+      const fromAddress = p.from as string;
+      const recipientAgentId = findAgentByInbox(state, toAddress) || "unknown";
+
+      const edge: EmailEdge = {
+        id: "edge-" + Date.now() + "-" + Math.random(),
+        fromAgentId: senderAgentId,
+        toAgentId: recipientAgentId,
+        fromAddress,
+        toAddress,
+        subject: (p.subject as string) || "",
+        body: (p.body as string) || "",
+        timestamp: Date.now(),
+        threadId: p.threadId as string,
+      };
+
+      return {
+        ...state,
+        emailEdges: [...state.emailEdges, edge],
+        emails: [...state.emails, {
+          id: "email-" + Date.now() + "-" + Math.random(),
+          from: fromAddress || senderAgentId,
+          to: toAddress,
+          subject: (p.subject as string) || "",
+          body: (p.body as string) || "",
+          timestamp: new Date().toISOString(),
+          agentId: senderAgentId,
+        }],
+      };
+    }
+    case "AGENT_EMAIL_RECEIVED": {
+      return state;
+    }
+    case "ORCHESTRATOR_DECISION": {
+      return state;
+    }
+    case "SELECT_NODE": {
+      return { ...state, selectedNodeId: action.nodeId, selectedEdgeId: null };
+    }
+    case "SELECT_EDGE": {
+      return { ...state, selectedEdgeId: action.edgeId, selectedNodeId: null };
     }
     case "RESET":
       return { ...initialState };
@@ -314,6 +442,10 @@ export function SSEProvider({ url, children }: { url: string; children: ReactNod
       agent_plan_created: "AGENT_PLAN_CREATED",
       orchestrator_phase: "ORCHESTRATOR_PHASE",
       agent_results: "AGENT_RESULTS",
+      agent_email_sent: "AGENT_EMAIL_SENT",
+      agent_email_received: "AGENT_EMAIL_RECEIVED",
+      agent_inbox_created: "AGENT_INBOX_CREATED",
+      orchestrator_decision: "ORCHESTRATOR_DECISION",
     };
     const actionType = typeMap[msg.type];
     if (actionType) {

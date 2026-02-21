@@ -1148,9 +1148,15 @@ function StatusRow({
       ) : status.status === "done" ? (
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <CheckCircle2 size={14} color={C.success} />
-          <span style={{ fontSize: "0.65rem", fontFamily: "monospace", color: C.textDim }}>
-            {status.txHash?.slice(0, 10)}...
-          </span>
+          {status.txHash === "already-exists" ? (
+            <span style={{ fontSize: "0.65rem", color: C.success, fontWeight: 500 }}>
+              Already configured
+            </span>
+          ) : (
+            <span style={{ fontSize: "0.65rem", fontFamily: "monospace", color: C.textDim }}>
+              {status.txHash?.slice(0, 10)}...
+            </span>
+          )}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>

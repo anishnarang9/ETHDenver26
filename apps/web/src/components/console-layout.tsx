@@ -2,16 +2,15 @@
 
 import { useState } from "react";
 import { useSSEState } from "../lib/sse-context";
-import { AgentCard } from "./agent-card";
-import { OrchestratorPhaseBanner } from "./orchestrator-phase-banner";
-import { SynthesisPanel } from "./synthesis-panel";
-import { EmailThread } from "./email-thread";
+import { AgentNetworkGraph } from "./agent-network-graph";
+import { AgentDetailPanel } from "./agent-detail-panel";
+import { EmailChainView } from "./email-chain-view";
 import { EnforcementPipeline } from "./enforcement-pipeline";
 import { MissionControl } from "./mission-control";
 import { WalletBalances } from "./wallet-balances";
 import { ReplayButton } from "./replay-button";
 import { AnimatePresence, motion } from "framer-motion";
-import { Mail, Shield, Command, Users, Zap, OctagonX } from "lucide-react";
+import { Mail, Shield, Command, Users, OctagonX, Network, ChevronDown } from "lucide-react";
 
 const plannerWallet = [
   { name: "Planner (Orchestrator)", address: process.env.NEXT_PUBLIC_PLANNER_ADDRESS || "", color: "#3b82f6" },
@@ -32,9 +31,10 @@ const sectionHeaderStyle: React.CSSProperties = {
 export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
   const { state, dispatch } = useSSEState();
   const [killing, setKilling] = useState(false);
+  const [bottomExpanded, setBottomExpanded] = useState(false);
 
   const agentCount = state.spawnedAgents.length;
-  const gridCols = agentCount <= 1 ? 1 : agentCount <= 3 ? agentCount : 3;
+  const emailCount = state.emailEdges.length;
 
   const isRunning =
     !!state.orchestratorPhase &&
@@ -44,13 +44,12 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
   const handleKill = async () => {
     setKilling(true);
     try {
-      await fetch(`${plannerUrl}/api/kill`, {
+      await fetch(plannerUrl + "/api/kill", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
       dispatch({ type: "RESET" });
     } catch {
-      // Even if the backend is unreachable, reset the frontend
       dispatch({ type: "RESET" });
     } finally {
       setKilling(false);
@@ -59,13 +58,13 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#e2e8f0", fontFamily: "'Inter', sans-serif" }}>
-      {/* ═══ Header ═══ */}
+      {/* Header */}
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          padding: "16px 24px",
+          padding: "12px 24px",
           borderBottom: "1px solid #1e293b",
         }}
       >
@@ -81,36 +80,75 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
                 WebkitTextFillColor: "transparent",
               }}
             >
-              TripDesk Console
+              TripDesk
             </h1>
-            <p style={{ margin: 0, fontSize: "0.8rem", color: "#64748b" }}>
-              Dynamic Multi-Agent Orchestrator on Kite
+            <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>
+              Email-Chain Agent Network on Kite
             </p>
           </div>
-          {/* Agent count pill */}
-          {agentCount > 0 && (
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 5,
-                padding: "4px 10px",
-                borderRadius: 20,
-                background: "#1e293b",
-                border: "1px solid #334155",
-                fontSize: "0.72rem",
-                fontWeight: 600,
-                color: "#94a3b8",
-              }}
-            >
-              <Users size={12} style={{ color: "#8b5cf6" }} />
-              {agentCount} agent{agentCount !== 1 ? "s" : ""}
-            </span>
-          )}
+          {/* Stats pills */}
+          <div style={{ display: "flex", gap: 6 }}>
+            {agentCount > 0 && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "3px 10px",
+                  borderRadius: 20,
+                  background: "#1e293b",
+                  border: "1px solid #334155",
+                  fontSize: "0.7rem",
+                  fontWeight: 600,
+                  color: "#94a3b8",
+                }}
+              >
+                <Users size={11} style={{ color: "#8b5cf6" }} />
+                {agentCount}
+              </span>
+            )}
+            {emailCount > 0 && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "3px 10px",
+                  borderRadius: 20,
+                  background: "#1e293b",
+                  border: "1px solid #334155",
+                  fontSize: "0.7rem",
+                  fontWeight: 600,
+                  color: "#94a3b8",
+                }}
+              >
+                <Mail size={11} style={{ color: "#818cf8" }} />
+                {emailCount}
+              </span>
+            )}
+            {state.orchestratorPhase && state.orchestratorPhase !== "completed" && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "3px 10px",
+                  borderRadius: 20,
+                  background: "rgba(34, 197, 94, 0.1)",
+                  border: "1px solid rgba(34, 197, 94, 0.3)",
+                  fontSize: "0.7rem",
+                  fontWeight: 600,
+                  color: "#22c55e",
+                  animation: "node-pulse 2s ease-in-out infinite",
+                }}
+              >
+                {state.orchestratorPhase}
+              </span>
+            )}
+          </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {/* Kill All button — visible when a run is active */}
           <AnimatePresence>
             {isRunning && (
               <motion.button
@@ -124,13 +162,13 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 6,
-                  padding: "8px 16px",
+                  padding: "7px 14px",
                   borderRadius: 8,
                   border: "1px solid #ef444480",
                   background: "linear-gradient(135deg, #dc2626, #b91c1c)",
                   color: "#fff",
                   fontWeight: 700,
-                  fontSize: "0.78rem",
+                  fontSize: "0.75rem",
                   cursor: killing ? "not-allowed" : "pointer",
                   fontFamily: "inherit",
                   opacity: killing ? 0.6 : 1,
@@ -139,111 +177,112 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
                   letterSpacing: "0.04em",
                 }}
               >
-                <OctagonX size={14} />
+                <OctagonX size={13} />
                 {killing ? "Killing..." : "Kill All"}
               </motion.button>
             )}
           </AnimatePresence>
-
           <ReplayButton plannerUrl={plannerUrl} />
         </div>
       </div>
 
-      {/* ═══ Phase Banner ═══ */}
-      {state.orchestratorPhase && (
-        <div style={{ padding: "14px 0 0" }}>
-          <OrchestratorPhaseBanner
-            phase={state.orchestratorPhase}
-            plannerThought={state.thoughts.planner}
-          />
+      {/* Agent Network Graph (~40% height) */}
+      <div style={{ padding: "12px 24px 0" }}>
+        <h2 style={sectionHeaderStyle}>
+          <Network size={14} style={{ color: "#818cf8" }} />
+          Agent Network
+          {state.thoughts.planner && (
+            <span style={{ fontWeight: 400, fontStyle: "italic", color: "#475569", fontSize: "0.68rem", marginLeft: 8 }}>
+              {state.thoughts.planner.slice(0, 80)}
+              {state.thoughts.planner.length > 80 && "..."}
+            </span>
+          )}
+        </h2>
+        <div style={{ height: "calc(40vh - 60px)", minHeight: 280 }}>
+          <AgentNetworkGraph />
         </div>
-      )}
+      </div>
 
-      {/* ═══ Agent Grid ═══ */}
-      {agentCount > 0 && (
-        <div style={{ padding: "16px 24px 0" }}>
-          <h2 style={sectionHeaderStyle}>
-            <Zap size={14} style={{ color: "#f59e0b" }} />
-            Active Agents
-          </h2>
-          <div
+      {/* Agent Detail Panel (~45% height) */}
+      <div style={{ padding: "12px 24px 0" }}>
+        <AgentDetailPanel />
+      </div>
+
+      {/* Collapsible bottom section */}
+      <div style={{ padding: "12px 24px 24px" }}>
+        <button
+          onClick={() => setBottomExpanded(!bottomExpanded)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "8px 0",
+            background: "none",
+            border: "none",
+            color: "#64748b",
+            fontSize: "0.72rem",
+            fontWeight: 600,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+          }}
+        >
+          <ChevronDown
+            size={14}
             style={{
-              display: "grid",
-              gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
-              gap: 12,
+              transform: bottomExpanded ? "rotate(180deg)" : "rotate(0deg)",
+              transition: "transform 0.2s",
             }}
-          >
-            <AnimatePresence>
-              {state.spawnedAgents.map((agent) => (
-                <AgentCard
-                  key={agent.id}
-                  agent={agent}
-                  browser={state.browsers[agent.id]}
-                  thought={state.thoughts[agent.id]}
-                />
-              ))}
-            </AnimatePresence>
-          </div>
-        </div>
-      )}
+          />
+          Enforcement | Wallet | Mission Control
+        </button>
 
-      {/* ═══ Bottom Row: Left (Email + Enforcement) | Right (Synthesis + Mission Control) ═══ */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 12,
-          padding: "16px 24px 24px",
-        }}
-      >
-        {/* Left column */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div>
-            <h2 style={sectionHeaderStyle}>
-              <Mail size={14} style={{ color: "#818cf8" }} />
-              Email Thread
-            </h2>
-            <EmailThread emails={state.emails} />
-          </div>
-          <div>
-            <h2 style={sectionHeaderStyle}>
-              <Shield size={14} style={{ color: "#f59e0b" }} />
-              Enforcement Pipeline
-            </h2>
-            <EnforcementPipeline steps={state.enforcementSteps} />
-          </div>
-        </div>
-
-        {/* Right column */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {/* Synthesis Panel */}
-          <div>
-            <h2 style={sectionHeaderStyle}>
-              <Zap size={14} style={{ color: "#8b5cf6" }} />
-              Synthesis
-            </h2>
-            <SynthesisPanel
-              phase={state.orchestratorPhase}
-              plannerThought={state.thoughts.planner}
-              synthesisBody={state.synthesisBody}
-            />
-          </div>
-
-          {plannerWallet.length > 0 && <WalletBalances wallets={plannerWallet} />}
-
-          <div>
-            <h2 style={sectionHeaderStyle}>
-              <Command size={14} style={{ color: "#3b82f6" }} />
-              Mission Control
-            </h2>
-            <MissionControl
-              transactions={state.transactions}
-              plannerUrl={plannerUrl}
-              agentAddress={process.env.NEXT_PUBLIC_PLANNER_ADDRESS}
-              plannerAddress={process.env.NEXT_PUBLIC_PLANNER_ADDRESS}
-            />
-          </div>
-        </div>
+        <AnimatePresence>
+          {bottomExpanded && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              style={{ overflow: "hidden" }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 12,
+                  paddingTop: 8,
+                }}
+              >
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div>
+                    <h2 style={sectionHeaderStyle}>
+                      <Shield size={14} style={{ color: "#f59e0b" }} />
+                      Enforcement Pipeline
+                    </h2>
+                    <EnforcementPipeline steps={state.enforcementSteps} />
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {plannerWallet.length > 0 && <WalletBalances wallets={plannerWallet} />}
+                  <div>
+                    <h2 style={sectionHeaderStyle}>
+                      <Command size={14} style={{ color: "#3b82f6" }} />
+                      Mission Control
+                    </h2>
+                    <MissionControl
+                      transactions={state.transactions}
+                      plannerUrl={plannerUrl}
+                      agentAddress={process.env.NEXT_PUBLIC_PLANNER_ADDRESS}
+                      plannerAddress={process.env.NEXT_PUBLIC_PLANNER_ADDRESS}
+                    />
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

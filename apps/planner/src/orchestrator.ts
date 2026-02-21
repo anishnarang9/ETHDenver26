@@ -3,38 +3,88 @@ import {
   runAgentLoop,
   AgentSpawner,
   createBrowserToolsWithSession,
+  createAgentMailClient,
+  type AgentMailClient,
   type SSEHub,
   type AgentTool,
 } from "@kite-stack/agent-core";
 import type { PlannerEnv } from "./config.js";
 import { createWeatherTool } from "./tools/weather.js";
-import { createEmailTools } from "./tools/email.js";
+import { createAgentEmailTools, createOrchestratorEmailTools } from "./tools/email.js";
+
+/* ------------------------------------------------------------------ */
+/*  InboxPool: manages dynamic inboxes within AgentMail's 10-limit    */
+/* ------------------------------------------------------------------ */
+
+class InboxPool {
+  private mailClient: AgentMailClient;
+  private apiKey: string;
+  private allocated = new Map<string, string>();
+
+  constructor(apiKey: string) {
+    this.apiKey = apiKey;
+    this.mailClient = createAgentMailClient(apiKey);
+  }
+
+  async allocate(agentId: string, roleName: string): Promise<string | null> {
+    try {
+      const res = await fetch("https://api.agentmail.to/v0/inboxes", {
+        headers: { Authorization: `Bearer ${this.apiKey}` },
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { inboxes: Array<{ inbox_id: string }> };
+        const existingAddresses = data.inboxes.map((i) => i.inbox_id);
+        const usedAddresses = new Set(this.allocated.values());
+        const available = existingAddresses.find(
+          (addr) => !usedAddresses.has(addr) && addr.includes("td-"),
+        );
+        if (available) {
+          this.allocated.set(agentId, available);
+          return available;
+        }
+      }
+    } catch {
+      /* fall through to create */
+    }
+
+    const suffix = agentId.slice(-4);
+    const username = "td-" + roleName + "-" + suffix;
+    try {
+      const inbox = await this.mailClient.createInbox(username);
+      this.allocated.set(agentId, inbox.address);
+      return inbox.address;
+    } catch (err) {
+      console.warn("[inbox-pool] Failed to create inbox for " + agentId + ":", (err as Error).message);
+      return null;
+    }
+  }
+
+  getClient(): AgentMailClient {
+    return this.mailClient;
+  }
+
+  getAddress(agentId: string): string | undefined {
+    return this.allocated.get(agentId);
+  }
+}
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-interface AgentManifestEntry {
+interface RunningAgent {
+  id: string;
   role: string;
-  systemPrompt: string;
-  task: string;
-  needsBrowser: boolean;
-  scopes: string[];
-}
-
-interface AgentResult {
-  agentId: string;
-  role: string;
-  status: "fulfilled" | "rejected";
-  result?: string;
-  error?: string;
+  inboxAddress: string | null;
+  status: "running" | "completed" | "failed";
+  promise: Promise<string>;
 }
 
 /* ------------------------------------------------------------------ */
-/*  Main dynamic orchestrator                                          */
+/*  Main email-chain orchestrator                                      */
 /* ------------------------------------------------------------------ */
 
-export async function runDynamicTripPlan(opts: {
+export async function runEmailChainTripPlan(opts: {
   humanEmail: { from: string; subject: string; body: string };
   sseHub: SSEHub;
   config: PlannerEnv;
@@ -44,134 +94,9 @@ export async function runDynamicTripPlan(opts: {
   const provider = new JsonRpcProvider(opts.config.KITE_RPC_URL);
   const paymentWallet = new Wallet(opts.config.PLANNER_PAYMENT_PRIVATE_KEY, provider);
 
-  opts.sseHub.emit({
-    type: "email_received",
-    agentId: "planner",
-    payload: { from: opts.humanEmail.from, subject: opts.humanEmail.subject, body: opts.humanEmail.body },
-  });
-
-  /* ---------------------------------------------------------------- */
-  /*  Phase 1: Planning — ask LLM what agents to spawn                 */
-  /* ---------------------------------------------------------------- */
-
-  opts.sseHub.emit({
-    type: "orchestrator_phase",
-    agentId: "planner",
-    payload: { phase: "planning", message: "Analyzing request and planning agent team..." },
-  });
-
-  let manifest: AgentManifestEntry[] = [];
-
-  const planAgentTool: AgentTool = {
-    name: "plan_agents",
-    description: "Define the team of specialist agents needed for this trip. Each agent will be spawned with a real wallet, on-chain passport, and browser session.",
-    parameters: {
-      type: "object",
-      properties: {
-        agents: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              role: { type: "string", description: "Short kebab-case role name, e.g. 'uber-researcher', 'yelp-scout', 'luma-event-finder'" },
-              systemPrompt: { type: "string", description: "System prompt for the agent describing its specialty" },
-              task: { type: "string", description: "Specific task/query for this agent" },
-              needsBrowser: { type: "boolean", description: "Whether this agent needs a Firecrawl browser session" },
-              scopes: { type: "array", items: { type: "string" }, description: "Authorization scopes: travel, booking, search, food, events, transport" },
-            },
-            required: ["role", "systemPrompt", "task", "needsBrowser", "scopes"],
-          },
-          description: "Array of agents to spawn",
-        },
-      },
-      required: ["agents"],
-    },
-    execute: async (args: Record<string, unknown>) => {
-      manifest = (args.agents as AgentManifestEntry[]) || [];
-      return { planned: manifest.length, agents: manifest.map((a) => a.role) };
-    },
-  };
-
-  const weatherTool = createWeatherTool({
-    weatherUrl: opts.config.KITE_WEATHER_URL,
-    facilitatorUrl: opts.config.FACILITATOR_URL,
-    sseHub: opts.sseHub,
-    paymentWallet,
-    provider,
-    paymentAsset: opts.config.PAYMENT_ASSET,
-  });
-
-  await runAgentLoop({
-    model: "gpt-5.2",
-    systemPrompt: `You are TripDesk Orchestrator. Your job is to analyze a trip planning request and decide which specialist agents to spawn.
-
-First, call get_weather to check weather at the destination.
-Then, call plan_agents with a team of 2-4 specialist agents tailored to the request.
-
-Common agent types:
-- "ride-researcher": Searches for transportation/ride options (needs browser)
-- "restaurant-scout": Finds restaurant recommendations (needs browser)
-- "event-finder": Discovers events on lu.ma and similar platforms (needs browser)
-- "itinerary-compiler": Compiles results into a formatted itinerary (no browser needed)
-
-Each agent gets a real on-chain wallet, passport, and optional browser session. Be efficient — only spawn agents that are truly needed.`,
-    userMessage: `New trip request:\n\nFrom: ${opts.humanEmail.from}\nSubject: ${opts.humanEmail.subject}\n\n${opts.humanEmail.body}`,
-    tools: [weatherTool, planAgentTool],
-    onThought: (text) => {
-      opts.sseHub.emit({ type: "llm_thinking", agentId: "planner", payload: { text } });
-    },
-    onToolCall: (name, args) => {
-      opts.sseHub.emit({ type: "llm_tool_call", agentId: "planner", payload: { tool: name, args } });
-    },
-    apiKey: opts.config.OPENAI_API_KEY,
-    maxIterations: 5,
-    signal: opts.signal,
-  });
-
-  if (opts.signal?.aborted) throw new Error("Agent killed");
-
-  if (manifest.length === 0) {
-    // Fallback: create a default set of agents
-    manifest = [
-      {
-        role: "ride-researcher",
-        systemPrompt: "You are a transportation research agent. Search for ride options from airports and between locations. Use the browser to search Google, Uber estimate sites, and transit sites. Return a JSON object with a 'rides' array containing objects with: type, provider, estimatedPrice, estimatedTime, notes.",
-        task: `Find transportation options for the trip described in: ${opts.humanEmail.body}`,
-        needsBrowser: true,
-        scopes: ["travel", "transport", "search"],
-      },
-      {
-        role: "restaurant-scout",
-        systemPrompt: "You are a restaurant recommendation agent. Search for restaurants near the destination using the browser. Return a JSON object with a 'restaurants' array containing objects with: name, cuisine, priceRange, rating, address, notes.",
-        task: `Find restaurant recommendations for: ${opts.humanEmail.body}`,
-        needsBrowser: true,
-        scopes: ["food", "search"],
-      },
-      {
-        role: "event-finder",
-        systemPrompt: "You are an event discovery agent specializing in tech/crypto/AI events. Search lu.ma and similar platforms. Return a JSON object with an 'events' array containing objects with: name, date, time, location, url, description, registrationOpen.",
-        task: `Find relevant events for: ${opts.humanEmail.body}`,
-        needsBrowser: true,
-        scopes: ["events", "search"],
-      },
-    ];
-  }
-
-  opts.sseHub.emit({
-    type: "agent_plan_created",
-    agentId: "planner",
-    payload: { agents: manifest.map((a) => ({ role: a.role, needsBrowser: a.needsBrowser, scopes: a.scopes })) },
-  });
-
-  /* ---------------------------------------------------------------- */
-  /*  Phase 2: Spawning — create wallets, passports, sessions          */
-  /* ---------------------------------------------------------------- */
-
-  opts.sseHub.emit({
-    type: "orchestrator_phase",
-    agentId: "planner",
-    payload: { phase: "spawning", message: `Spawning ${manifest.length} agents with on-chain identities...` },
-  });
+  const inboxPool = opts.config.AGENTMAIL_API_KEY
+    ? new InboxPool(opts.config.AGENTMAIL_API_KEY)
+    : null;
 
   const spawner = new AgentSpawner({
     rpcUrl: opts.config.KITE_RPC_URL,
@@ -183,163 +108,358 @@ Each agent gets a real on-chain wallet, passport, and optional browser session. 
     sseHub: opts.sseHub,
   });
 
-  // Spawn all agents (sequential to avoid nonce issues, but each spawn emits SSE events)
-  const spawnedMap = new Map<string, { agentId: string; role: string; entry: AgentManifestEntry }>();
+  const runningAgents = new Map<string, RunningAgent>();
+  const agentDirectory: Record<string, string> = {};
+  if (opts.plannerInboxAddress) {
+    agentDirectory["orchestrator"] = opts.plannerInboxAddress;
+  }
 
-  for (const entry of manifest) {
-    if (opts.signal?.aborted) throw new Error("Agent killed");
-    try {
-      const spawned = await spawner.spawnAgent({ role: entry.role, scopes: entry.scopes });
-      spawnedMap.set(spawned.id, { agentId: spawned.id, role: entry.role, entry });
-    } catch (err) {
-      opts.sseHub.emit({
-        type: "error",
-        agentId: "planner",
-        payload: { message: `Failed to spawn ${entry.role}: ${(err as Error).message}` },
-      });
-    }
+  opts.sseHub.emit({
+    type: "email_received",
+    agentId: "planner",
+    payload: {
+      from: opts.humanEmail.from,
+      subject: opts.humanEmail.subject,
+      body: opts.humanEmail.body,
+    },
+  });
+
+  function buildDirectoryString(): string {
+    return Object.entries(agentDirectory)
+      .map(([role, addr]) => "  - " + role + ": " + addr)
+      .join("\n");
   }
 
   /* ---------------------------------------------------------------- */
-  /*  Phase 3: Execution — run all agents in parallel                  */
+  /*  spawn_agent tool                                                 */
   /* ---------------------------------------------------------------- */
 
-  opts.sseHub.emit({
-    type: "orchestrator_phase",
-    agentId: "planner",
-    payload: { phase: "executing", message: `Running ${spawnedMap.size} agents in parallel...` },
-  });
+  const spawnAgentTool: AgentTool = {
+    name: "spawn_agent",
+    description:
+      "Spawn a specialist agent with on-chain identity and email inbox. The agent runs autonomously and emails results back. Agents can also email each other for coordination.",
+    parameters: {
+      type: "object",
+      properties: {
+        role: { type: "string", description: "Short kebab-case role, e.g. 'ride-researcher'" },
+        systemPrompt: { type: "string", description: "System prompt for the agent" },
+        task: { type: "string", description: "Task description for the agent" },
+        needsBrowser: { type: "boolean", description: "Whether agent needs Firecrawl browser" },
+        scopes: {
+          type: "array",
+          items: { type: "string" },
+          description: "Authorization scopes",
+        },
+        emailTo: {
+          type: "string",
+          description: "Optional: primary email to send results to (defaults to orchestrator)",
+        },
+        collaborateWith: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional: list of agent roles this agent should coordinate with via email",
+        },
+      },
+      required: ["role", "systemPrompt", "task", "needsBrowser", "scopes"],
+    },
+    execute: async (args: Record<string, unknown>) => {
+      const role = args.role as string;
+      const systemPrompt = args.systemPrompt as string;
+      const task = args.task as string;
+      const needsBrowser = args.needsBrowser as boolean;
+      const scopes = args.scopes as string[];
+      const emailTo = (args.emailTo as string) || opts.plannerInboxAddress || "";
+      const collaborateWith = (args.collaborateWith as string[]) || [];
 
-  const agentPromises: Promise<AgentResult>[] = [];
+      if (opts.signal?.aborted) throw new Error("Agent killed");
 
-  for (const [agentId, { role, entry }] of spawnedMap) {
-    const promise = (async (): Promise<AgentResult> => {
-      let browserCleanup: (() => Promise<void>) | undefined;
-
+      let spawned;
       try {
-        opts.sseHub.emit({ type: "agent_status", agentId, payload: { status: "active", role } });
+        spawned = await spawner.spawnAgent({ role, scopes });
+      } catch (err) {
+        return { spawned: false, error: (err as Error).message };
+      }
 
-        const tools: AgentTool[] = [];
+      let inboxAddress: string | null = null;
+      if (inboxPool) {
+        inboxAddress = await inboxPool.allocate(spawned.id, role);
+        if (inboxAddress) {
+          agentDirectory[role] = inboxAddress;
+          opts.sseHub.emit({
+            type: "agent_inbox_created",
+            agentId: spawned.id,
+            payload: { role, inboxAddress },
+          });
+        }
+      }
 
-        // Add browser tools if needed
-        if (entry.needsBrowser && opts.config.FIRECRAWL_API_KEY) {
+      const agentTools: AgentTool[] = [];
+
+      if (inboxAddress && inboxPool) {
+        agentTools.push(
+          ...createAgentEmailTools({
+            mailClient: inboxPool.getClient(),
+            agentId: spawned.id,
+            agentInboxAddress: inboxAddress,
+            sseHub: opts.sseHub,
+          }),
+        );
+      }
+
+      let browserCleanup: (() => Promise<void>) | undefined;
+      if (needsBrowser && opts.config.FIRECRAWL_API_KEY) {
+        try {
           const browserResult = await createBrowserToolsWithSession({
             firecrawlApiKey: opts.config.FIRECRAWL_API_KEY,
-            agentId,
+            agentId: spawned.id,
             sseHub: opts.sseHub,
           });
-          tools.push(...browserResult.tools);
+          agentTools.push(...browserResult.tools);
           browserCleanup = browserResult.cleanup;
+        } catch (err) {
+          console.warn("[orchestrator] Browser setup failed for " + role + ":", (err as Error).message);
         }
-
-        // Add report_results tool
-        let reportedResult = "";
-        tools.push({
-          name: "report_results",
-          description: "Report your findings back to the orchestrator. Call this when done with your task.",
-          parameters: {
-            type: "object",
-            properties: {
-              results: { type: "string", description: "JSON string of your findings" },
-            },
-            required: ["results"],
-          },
-          execute: async (args: Record<string, unknown>) => {
-            reportedResult = args.results as string;
-            return { acknowledged: true };
-          },
-        });
-
-        const result = await runAgentLoop({
-          model: "gpt-5.2",
-          systemPrompt: entry.systemPrompt + "\n\nIMPORTANT: When you have gathered your findings, call report_results with a JSON summary. Be thorough but efficient.",
-          userMessage: entry.task,
-          tools,
-          onThought: (text) => {
-            opts.sseHub.emit({ type: "llm_thinking", agentId, payload: { text } });
-          },
-          onToolCall: (name, args) => {
-            opts.sseHub.emit({ type: "llm_tool_call", agentId, payload: { tool: name, args } });
-          },
-          apiKey: opts.config.OPENAI_API_KEY,
-          maxIterations: 12,
-          signal: opts.signal,
-        });
-
-        // Cleanup browser session
-        if (browserCleanup) await browserCleanup();
-
-        const finalResult = reportedResult || result.finalAnswer;
-
-        opts.sseHub.emit({ type: "agent_status", agentId, payload: { status: "completed", role } });
-
-        return { agentId, role, status: "fulfilled", result: finalResult };
-      } catch (err) {
-        if (browserCleanup) await browserCleanup().catch(() => {});
-        opts.sseHub.emit({ type: "agent_status", agentId, payload: { status: "failed", role, error: (err as Error).message } });
-        return { agentId, role, status: "rejected", error: (err as Error).message };
       }
-    })();
 
-    agentPromises.push(promise);
-  }
+      let reportedResult = "";
+      agentTools.push({
+        name: "report_results",
+        description: "Report your findings. Use this after emailing your results, or as a fallback if email is unavailable.",
+        parameters: {
+          type: "object",
+          properties: {
+            results: { type: "string", description: "JSON string of findings" },
+          },
+          required: ["results"],
+        },
+        execute: async (a: Record<string, unknown>) => {
+          reportedResult = a.results as string;
+          return { acknowledged: true };
+        },
+      });
 
-  const agentResults = await Promise.allSettled(agentPromises);
-  const results: AgentResult[] = agentResults.map((r) =>
-    r.status === "fulfilled" ? r.value : { agentId: "unknown", role: "unknown", status: "rejected" as const, error: (r.reason as Error).message },
-  );
+      const collabLines = collaborateWith
+        .filter((r) => agentDirectory[r])
+        .map((r) => "- Coordinate with " + r + " at " + agentDirectory[r] + " -- share relevant findings via email.")
+        .join("\n");
 
-  opts.sseHub.emit({
-    type: "agent_results",
-    agentId: "planner",
-    payload: { results: results.map((r) => ({ role: r.role, status: r.status, hasResult: !!r.result })) },
-  });
+      const fullSystemPrompt = systemPrompt + "\n\n" +
+        "## Agent Email Directory\n" +
+        "You have a real email inbox at: " + (inboxAddress || "not available") + "\n" +
+        "The following agents are available to email:\n" +
+        buildDirectoryString() + "\n\n" +
+        "## Communication Protocol\n" +
+        "1. Complete your assigned task using available tools.\n" +
+        "2. When done, email your results to the orchestrator at: " + emailTo + "\n" +
+        "   Use send_email with a clear subject line and your findings in the body.\n" +
+        "3. You can also email other agents to request information or share findings.\n" +
+        "4. Use check_inbox to see if other agents have sent you information.\n" +
+        "5. Use reply_to_thread to continue an existing email conversation.\n" +
+        "6. Also call report_results with a JSON summary as backup.\n" +
+        (collabLines ? "\n## Collaboration\n" + collabLines + "\n" : "") +
+        "IMPORTANT: Be thorough but efficient. You have a limited number of iterations.";
+
+      const agentPromise = (async (): Promise<string> => {
+        try {
+          opts.sseHub.emit({
+            type: "agent_status",
+            agentId: spawned.id,
+            payload: { status: "active", role },
+          });
+
+          const result = await runAgentLoop({
+            model: "gpt-5.2",
+            systemPrompt: fullSystemPrompt,
+            userMessage: task,
+            tools: agentTools,
+            onThought: (text) => {
+              opts.sseHub.emit({ type: "llm_thinking", agentId: spawned.id, payload: { text } });
+            },
+            onToolCall: (name, a) => {
+              opts.sseHub.emit({ type: "llm_tool_call", agentId: spawned.id, payload: { tool: name, args: a } });
+            },
+            apiKey: opts.config.OPENAI_API_KEY,
+            maxIterations: 12,
+            signal: opts.signal,
+          });
+
+          if (browserCleanup) await browserCleanup();
+
+          const finalResult = reportedResult || result.finalAnswer;
+          opts.sseHub.emit({
+            type: "agent_status",
+            agentId: spawned.id,
+            payload: { status: "completed", role },
+          });
+          return finalResult;
+        } catch (err) {
+          if (browserCleanup) await browserCleanup().catch(() => {});
+          opts.sseHub.emit({
+            type: "agent_status",
+            agentId: spawned.id,
+            payload: { status: "failed", role, error: (err as Error).message },
+          });
+          throw err;
+        }
+      })();
+
+      const running: RunningAgent = {
+        id: spawned.id,
+        role,
+        inboxAddress,
+        status: "running",
+        promise: agentPromise,
+      };
+      runningAgents.set(spawned.id, running);
+
+      agentPromise
+        .then(() => { running.status = "completed"; })
+        .catch(() => { running.status = "failed"; });
+
+      return {
+        spawned: true,
+        agentId: spawned.id,
+        role,
+        inboxAddress: inboxAddress || "no-inbox",
+        address: spawned.address,
+      };
+    },
+  };
 
   /* ---------------------------------------------------------------- */
-  /*  Phase 4: Synthesis — compile results into itinerary              */
+  /*  get_agent_statuses tool                                          */
   /* ---------------------------------------------------------------- */
 
-  if (opts.signal?.aborted) throw new Error("Agent killed");
+  const getAgentStatusesTool: AgentTool = {
+    name: "get_agent_statuses",
+    description: "Check which agents are running, completed, or failed.",
+    parameters: { type: "object", properties: {}, required: [] },
+    execute: async () => {
+      const statuses = Array.from(runningAgents.values()).map((a) => ({
+        agentId: a.id,
+        role: a.role,
+        status: a.status,
+        inboxAddress: a.inboxAddress,
+      }));
+      return { agents: statuses };
+    },
+  };
 
-  opts.sseHub.emit({
-    type: "orchestrator_phase",
-    agentId: "planner",
-    payload: { phase: "synthesizing", message: "Compiling agent results into final itinerary..." },
+  /* ---------------------------------------------------------------- */
+  /*  wait_for_agents tool                                             */
+  /* ---------------------------------------------------------------- */
+
+  const waitForAgentsTool: AgentTool = {
+    name: "wait_for_agents",
+    description: "Wait up to 60 seconds for all running agents to complete.",
+    parameters: { type: "object", properties: {}, required: [] },
+    execute: async () => {
+      const running = Array.from(runningAgents.values()).filter((a) => a.status === "running");
+      if (running.length === 0) return { allDone: true, agents: [] };
+
+      opts.sseHub.emit({
+        type: "orchestrator_decision",
+        agentId: "planner",
+        payload: { decision: "waiting", waitingFor: running.map((a) => a.role) },
+      });
+
+      const timeout = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 60000));
+      const allDone = Promise.allSettled(running.map((a) => a.promise)).then(() => "done" as const);
+      await Promise.race([allDone, timeout]);
+
+      const results = Array.from(runningAgents.values()).map((a) => ({
+        agentId: a.id,
+        role: a.role,
+        status: a.status,
+      }));
+      return { agents: results };
+    },
+  };
+
+  /* ---------------------------------------------------------------- */
+  /*  Weather + orchestrator email tools                               */
+  /* ---------------------------------------------------------------- */
+
+  const weatherTool = createWeatherTool({
+    weatherUrl: opts.config.KITE_WEATHER_URL,
+    facilitatorUrl: opts.config.FACILITATOR_URL,
+    sseHub: opts.sseHub,
+    paymentWallet,
+    provider,
+    paymentAsset: opts.config.PAYMENT_ASSET,
   });
 
-  const emailTools = createEmailTools({
+  const orchestratorEmailTools = createOrchestratorEmailTools({
     agentMailApiKey: opts.config.AGENTMAIL_API_KEY,
     plannerInboxAddress: opts.plannerInboxAddress,
     sseHub: opts.sseHub,
   });
 
-  const resultsText = results
-    .map((r) => `### ${r.role} (${r.status})\n${r.result || r.error || "No results"}`)
-    .join("\n\n");
+  /* ---------------------------------------------------------------- */
+  /*  Coordinator loop                                                 */
+  /* ---------------------------------------------------------------- */
+
+  opts.sseHub.emit({
+    type: "orchestrator_phase",
+    agentId: "planner",
+    payload: { phase: "coordinating", message: "Analyzing request and coordinating agents..." },
+  });
+
+  const orchestratorSystemPrompt =
+    "You are TripDesk Orchestrator -- a coordinator that spawns specialist agents who communicate via email.\n\n" +
+    "## Your workflow:\n" +
+    "1. Call get_weather to check weather at the destination.\n" +
+    "2. Use spawn_agent to create 2-4 specialist agents. Each gets a real on-chain wallet, passport, and email inbox.\n" +
+    "   - Use the collaborateWith parameter to tell agents which other agents they should coordinate with.\n" +
+    "   - For example, the itinerary-compiler should collaborateWith [\"ride-researcher\", \"restaurant-scout\", \"event-finder\"].\n" +
+    "3. Call wait_for_agents to wait for them to finish.\n" +
+    "4. Call check_orchestrator_inbox to read their emailed reports.\n" +
+    "5. Compile the results and call email_human to send the final itinerary to the requester.\n\n" +
+    "## Agent types you can spawn:\n" +
+    "- \"ride-researcher\": Searches for rides/transport (needs browser)\n" +
+    "- \"restaurant-scout\": Finds restaurants (needs browser)\n" +
+    "- \"event-finder\": Discovers events on lu.ma etc (needs browser)\n" +
+    "- \"itinerary-compiler\": Compiles results from other agents (no browser needed)\n\n" +
+    "## Agent Communication:\n" +
+    "- Each agent gets its own email inbox and can send/receive emails to/from any other agent.\n" +
+    "- Agents can email you (the orchestrator) and each other directly.\n" +
+    "- After spawning all agents, they will work autonomously and email their results.\n" +
+    "- The agent directory is shared so they know each other's addresses.\n\n" +
+    "## Important:\n" +
+    "- Be efficient -- only spawn agents that are truly needed.\n" +
+    "- After waiting, ALWAYS check your inbox for their reports before synthesizing.\n" +
+    "- The final email to the human should be a beautiful, organized itinerary.";
 
   await runAgentLoop({
     model: "gpt-5.2",
-    systemPrompt: `You are TripDesk Synthesizer. Compile the results from multiple specialist agents into a beautiful, well-organized travel itinerary.
-
-The itinerary should include:
-- Transportation options with prices
-- Restaurant recommendations with details
-- Event listings with dates/times/registration links
-- Weather considerations
-- A suggested day-by-day schedule if possible
-
-Send the final itinerary to the human via email_human. Use the "From" address from the original request as the "to" recipient.
-IMPORTANT: The recipient email is: ${opts.humanEmail.from}`,
-    userMessage: `Original request from ${opts.humanEmail.from}:\n${opts.humanEmail.body}\n\n---\n\nAgent Results:\n\n${resultsText}`,
-    tools: [...emailTools],
+    systemPrompt: orchestratorSystemPrompt,
+    userMessage: "New trip request:\n\nFrom: " + opts.humanEmail.from + "\nSubject: " + opts.humanEmail.subject + "\n\n" + opts.humanEmail.body,
+    tools: [
+      weatherTool,
+      spawnAgentTool,
+      getAgentStatusesTool,
+      waitForAgentsTool,
+      ...orchestratorEmailTools,
+    ],
     onThought: (text) => {
       opts.sseHub.emit({ type: "llm_thinking", agentId: "planner", payload: { text } });
     },
     onToolCall: (name, args) => {
-      opts.sseHub.emit({ type: "llm_tool_call", agentId: "planner", payload: { tool: name, args } });
+      opts.sseHub.emit({
+        type: "llm_tool_call",
+        agentId: "planner",
+        payload: { tool: name, args },
+      });
+      if (name === "spawn_agent") {
+        opts.sseHub.emit({
+          type: "orchestrator_decision",
+          agentId: "planner",
+          payload: { decision: "spawning", role: (args as Record<string, unknown>).role },
+        });
+      }
     },
     apiKey: opts.config.OPENAI_API_KEY,
-    maxIterations: 5,
+    maxIterations: 15,
     signal: opts.signal,
   });
 

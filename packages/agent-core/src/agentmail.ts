@@ -22,6 +22,11 @@ export interface AgentMailClient {
   }): Promise<{ messageId: string; threadId: string }>;
   listThreads(inboxId: string): Promise<Thread[]>;
   getThread(inboxId: string, threadId: string): Promise<Thread>;
+  replyToMessage(opts: {
+    inboxId: string;
+    messageId: string;
+    text: string;
+  }): Promise<{ messageId: string; threadId: string }>;
   createWebhook(opts: {
     url: string;
     inboxId: string;

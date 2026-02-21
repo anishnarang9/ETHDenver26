@@ -38,6 +38,9 @@ export function useSSE(url: string, onMessage: (msg: SSEMessage) => void) {
       // Dynamic agent events
       "agent_spawning", "agent_spawned", "agent_plan_created",
       "orchestrator_phase", "agent_results",
+      // Email-chain architecture events
+      "agent_email_sent", "agent_email_received", "agent_inbox_created",
+      "orchestrator_decision",
     ];
 
     for (const type of eventTypes) {

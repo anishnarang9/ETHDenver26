@@ -3,7 +3,7 @@ import cors from "@fastify/cors";
 import { SSEHub, type SpawnedAgent, type RunEventWriter } from "@kite-stack/agent-core";
 import { prisma } from "@kite-stack/db";
 import { loadConfig } from "./config.js";
-import { runDynamicTripPlan } from "./orchestrator.js";
+import { runEmailChainTripPlan } from "./orchestrator.js";
 
 const config = loadConfig();
 
@@ -121,7 +121,7 @@ app.post("/api/webhook/email", async (request) => {
   currentAbortController = new AbortController();
 
   currentHub.newRun();
-  runDynamicTripPlan({ humanEmail, sseHub: currentHub, config, plannerInboxAddress: mailAddresses?.plannerInbox.address, signal: currentAbortController.signal }).catch((err) => {
+  runEmailChainTripPlan({ humanEmail, sseHub: currentHub, config, plannerInboxAddress: mailAddresses?.plannerInbox.address, signal: currentAbortController.signal }).catch((err) => {
     if ((err as Error).message === "Agent killed") return;
     app.log.error(err, "Trip planning failed");
     currentHub.emit({ type: "error", agentId: "planner", payload: { message: (err as Error).message } });
@@ -161,7 +161,7 @@ app.post("/api/trigger", async (request) => {
   currentAbortController = new AbortController();
 
   currentHub.newRun();
-  runDynamicTripPlan({ humanEmail, sseHub: currentHub, config, plannerInboxAddress: mailAddresses?.plannerInbox.address, signal: currentAbortController.signal }).catch((err) => {
+  runEmailChainTripPlan({ humanEmail, sseHub: currentHub, config, plannerInboxAddress: mailAddresses?.plannerInbox.address, signal: currentAbortController.signal }).catch((err) => {
     if ((err as Error).message === "Agent killed") {
       app.log.info("Run killed by user");
       return;
