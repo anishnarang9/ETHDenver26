@@ -37,7 +37,7 @@ await app.register(cors, { origin: true });
 
 app.get("/health", async () => ({ ok: true, service: "planner" }));
 
-// SSE endpoint - dashboard connects here
+// SSE endpoint - dashboard connects here (persistent hub, clients survive across runs)
 app.get("/api/events", (request, reply) => {
   currentHub.addClient(reply.raw);
   request.raw.on("close", () => currentHub.removeClient(reply.raw));
@@ -85,8 +85,8 @@ app.post("/api/webhook/email", async (request) => {
     body: body.body || body.text || "Plan my trip",
   };
 
-  // Start trip planning in background
-  currentHub = new SSEHub({ dbWriter });
+  // Start trip planning in background — reuse hub so SSE clients stay connected
+  currentHub.newRun();
   runTripPlan({ humanEmail, sseHub: currentHub, config, plannerInboxAddress: mailAddresses?.plannerInbox.address }).catch((err) => {
     app.log.error(err, "Trip planning failed");
     currentHub.emit({ type: "error", agentId: "planner", payload: { message: (err as Error).message } });
@@ -120,7 +120,7 @@ app.post("/api/trigger", async (request) => {
     humanEmail.body = "Register me for one more event on Luma.";
   }
 
-  currentHub = new SSEHub({ dbWriter });
+  currentHub.newRun();
   runTripPlan({ humanEmail, sseHub: currentHub, config, plannerInboxAddress: mailAddresses?.plannerInbox.address }).catch((err) => {
     app.log.error(err, "Trip planning failed");
     currentHub.emit({ type: "error", agentId: "planner", payload: { message: (err as Error).message } });

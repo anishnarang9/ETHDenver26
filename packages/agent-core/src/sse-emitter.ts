@@ -13,7 +13,7 @@ export interface RunEventWriter {
 
 export class SSEHub {
   private clients = new Set<ServerResponse>();
-  public readonly runId: string;
+  public runId: string;
   private runStart: number;
   private dbWriter?: RunEventWriter;
 
@@ -21,6 +21,12 @@ export class SSEHub {
     this.runId = opts?.runId ?? randomUUID();
     this.runStart = Date.now();
     this.dbWriter = opts?.dbWriter;
+  }
+
+  /** Reset for a new run while keeping all connected SSE clients */
+  newRun(runId?: string): void {
+    this.runId = runId ?? randomUUID();
+    this.runStart = Date.now();
   }
 
   addClient(res: ServerResponse): void {
