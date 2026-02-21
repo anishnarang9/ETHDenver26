@@ -263,17 +263,28 @@ export async function runEmailChainTripPlan(opts: {
       }
 
       let browserCleanup: (() => Promise<void>) | undefined;
+      let hasBrowser = false;
       if (needsBrowser && opts.config.FIRECRAWL_API_KEY) {
-        try {
-          const browserResult = await createBrowserToolsWithSession({
-            firecrawlApiKey: opts.config.FIRECRAWL_API_KEY,
-            agentId: spawned.id,
-            sseHub: opts.sseHub,
-          });
-          agentTools.push(...browserResult.tools);
-          browserCleanup = browserResult.cleanup;
-        } catch (err) {
-          console.warn("[orchestrator] Browser setup failed for " + role + ":", (err as Error).message);
+        // Try up to 2 times with a delay between attempts
+        for (let attempt = 0; attempt < 2 && !hasBrowser; attempt++) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
+          try {
+            const browserResult = await createBrowserToolsWithSession({
+              firecrawlApiKey: opts.config.FIRECRAWL_API_KEY,
+              agentId: spawned.id,
+              sseHub: opts.sseHub,
+              ttl: 900,
+            });
+            if (browserResult.tools.length > 0) {
+              agentTools.push(...browserResult.tools);
+              browserCleanup = browserResult.cleanup;
+              hasBrowser = true;
+            }
+          } catch (err) {
+            console.warn("[orchestrator] Browser setup attempt " + (attempt + 1) + " failed for " + role + ":", (err as Error).message);
+          }
+        }
+        if (!hasBrowser) {
           opts.sseHub.emit({
             type: "browser_session",
             agentId: spawned.id,
@@ -320,11 +331,20 @@ export async function runEmailChainTripPlan(opts: {
         .filter((r) => agentDirectory[r])
         .map((r) => r + ": " + agentDirectory[r]);
 
+      const browserFallback = needsBrowser && !hasBrowser
+        ? "\n## IMPORTANT: Browser Unavailable\n" +
+          "Your browser session could not be created. You do NOT have browser tools.\n" +
+          "Instead: use your knowledge, email other agents to request data, and compile\n" +
+          "the best results you can from what you know and what collaborators send you.\n" +
+          "Do NOT try to call navigate, extract_text, or other browser tools — they don't exist.\n"
+        : "";
+
       const fullSystemPrompt = systemPrompt + "\n\n" +
         "## Agent Email Directory\n" +
         "You have a real email inbox at: " + (inboxAddress || "not available") + "\n" +
         "The following agents are available to email:\n" +
         buildDirectoryString() + "\n\n" +
+        browserFallback +
         "## MANDATORY Communication Protocol\n" +
         "1. FIRST: Call check_inbox — other agents may have already sent you data.\n" +
         "2. Do your research using your tools (browser, hire, etc.).\n" +
@@ -388,12 +408,15 @@ export async function runEmailChainTripPlan(opts: {
           return finalResult;
         } catch (err) {
           if (browserCleanup) await browserCleanup().catch(() => {});
+          const errorMsg = (err as Error).message;
+          console.error("[orchestrator] Agent " + role + " failed:", errorMsg);
           opts.sseHub.emit({
             type: "agent_status",
             agentId: spawned.id,
-            payload: { status: "failed", role, error: (err as Error).message },
+            payload: { status: "failed", role, error: errorMsg },
           });
-          throw err;
+          // Return partial results instead of throwing — don't crash the run
+          return reportedResult || "Agent " + role + " failed: " + errorMsg;
         }
       })();
 

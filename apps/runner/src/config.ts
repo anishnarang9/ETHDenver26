@@ -1,7 +1,10 @@
 import dotenv from "dotenv";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
-dotenv.config();
+const __dirname = dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: resolve(__dirname, "../../../.env") });
 
 const RunnerConfigSchema = z.object({
   GATEWAY_BASE_URL: z.string().default("http://localhost:4001"),
