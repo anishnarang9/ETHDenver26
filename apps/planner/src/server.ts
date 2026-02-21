@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { SSEHub, type SpawnedAgent, type RunEventWriter, createAgentMailClient } from "@kite-stack/agent-core";
 import { prisma } from "@kite-stack/db";
+import nodemailer from "nodemailer";
 import { loadConfig } from "./config.js";
 import { runEmailChainTripPlan } from "./orchestrator.js";
 
@@ -39,8 +40,12 @@ function startInboxPolling(inboxId: string, apiKey: string) {
         seenThreadIds.add(thread.id);
 
         const firstMsg = thread.messages[0];
-        // Skip internal agent-to-agent messages
-        if (!firstMsg || firstMsg.from.endsWith("@agentmail.to")) continue;
+        if (!firstMsg) continue;
+        // Skip internal agent-to-agent messages (td-* inboxes).
+        // Allow human-proxy inboxes (non td-* agentmail addresses) and external senders.
+        const sender = firstMsg.from;
+        const isInternalAgent = sender.endsWith("@agentmail.to") && sender.startsWith("td-");
+        if (isInternalAgent) continue;
 
         // Fetch full message body
         let body = firstMsg.body;
@@ -204,7 +209,88 @@ app.post("/api/webhook/email", async (request) => {
   return { ok: true, runId: currentHub.runId };
 });
 
-// Manual trigger from dashboard
+// ── Send real email to planner inbox ─────────────────────────────────────────
+// Two modes:
+//   1. SMTP configured → send from user's real email address via SMTP
+//   2. Fallback → create a human-proxy AgentMail inbox and send from there
+app.post("/api/send-email", async (request) => {
+  const body = (request.body ?? {}) as {
+    from: string;
+    subject: string;
+    body: string;
+  };
+
+  if (!body.from || !body.subject || !body.body) {
+    return { ok: false, error: "Missing from, subject, or body" };
+  }
+
+  const plannerAddress = mailAddresses?.plannerInbox.address;
+  if (!plannerAddress) {
+    return { ok: false, error: "Planner inbox not configured — AgentMail may be unavailable" };
+  }
+
+  // Try SMTP first
+  if (config.SMTP_HOST && config.SMTP_USER && config.SMTP_PASS) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: config.SMTP_HOST,
+        port: Number(config.SMTP_PORT) || 587,
+        secure: Number(config.SMTP_PORT) === 465,
+        auth: { user: config.SMTP_USER, pass: config.SMTP_PASS },
+      });
+
+      await transporter.sendMail({
+        from: body.from,
+        to: plannerAddress,
+        subject: body.subject,
+        text: body.body,
+      });
+
+      app.log.info("[send-email] Sent via SMTP from %s to %s", body.from, plannerAddress);
+      return { ok: true, method: "smtp", from: body.from, to: plannerAddress };
+    } catch (err) {
+      app.log.warn("[send-email] SMTP failed, falling back to AgentMail relay: %s", (err as Error).message);
+      // Fall through to AgentMail relay
+    }
+  }
+
+  // Fallback: AgentMail relay — create a human-proxy inbox and send from there
+  if (!config.AGENTMAIL_API_KEY) {
+    return { ok: false, error: "Neither SMTP nor AgentMail configured" };
+  }
+
+  try {
+    const client = createAgentMailClient(config.AGENTMAIL_API_KEY);
+
+    // Derive a stable proxy username from the user's email (e.g. "vagarwa4" from "vagarwa4@terpmail.umd.edu")
+    const localPart = body.from.split("@")[0] || "human";
+    const proxyUsername = localPart + "-human";
+
+    // Try to create or reuse the proxy inbox
+    let proxyAddress: string;
+    try {
+      const inbox = await client.createInbox(proxyUsername);
+      proxyAddress = inbox.address;
+    } catch {
+      // Inbox already exists — reuse it
+      proxyAddress = proxyUsername + "@agentmail.to";
+    }
+
+    await client.sendMessage({
+      from: proxyAddress,
+      to: plannerAddress,
+      subject: body.subject,
+      body: `[From: ${body.from}]\n\n${body.body}`,
+    });
+
+    app.log.info("[send-email] Sent via AgentMail relay from %s (proxy for %s) to %s", proxyAddress, body.from, plannerAddress);
+    return { ok: true, method: "agentmail-relay", from: body.from, proxy: proxyAddress, to: plannerAddress };
+  } catch (err) {
+    return { ok: false, error: `AgentMail relay failed: ${(err as Error).message}` };
+  }
+});
+
+// Manual trigger from dashboard (kept for special demo actions that bypass email)
 app.post("/api/trigger", async (request) => {
   const body = (request.body ?? {}) as {
     action?: string;
@@ -214,35 +300,18 @@ app.post("/api/trigger", async (request) => {
   };
 
   const action = body.action || "plan-trip";
-  const defaultHumanEmail = mailAddresses?.plannerInbox.address || "tripdesk-planner@agentmail.to";
+
+  // For the main plan-trip action, require from/subject/body from the caller
+  // (the compose form in mission-control sends these)
+  const humanFrom = body.from || "unknown@user.com";
 
   const humanEmail = {
-    from: body.from || defaultHumanEmail,
-    subject: body.subject || "ETHDenver Trip Planning — 6 Students from UMD (Feb 18–21)",
-    body: body.body || `Hi TripDesk! We're a group of 6 college students from the University of Maryland heading to ETHDenver 2025 and need help planning the full trip.
-
-## Travel Details
-- **Group size:** 6 students (all early 20s, no mobility needs)
-- **Outbound flight:** Wednesday Feb 18, arriving Denver International Airport (DEN) at ~11:00 AM local time
-- **Return flight:** Saturday Feb 21, 4:30 PM from DEN. We need to leave the ETHDenver venue at 4850 Western Dr by ~2:00 PM to make our flight.
-- **Accommodation:** Airbnb already booked at 2592 Meadowbrook Dr, Denver CO
-
-## What We Need
-1. **Airport ride (arrival):** Cheapest/fastest option from DEN → 2592 Meadowbrook Dr on Wednesday ~11 AM. We're 6 people so may need XL or two separate rides — compare Uber, Lyft, and shuttle options.
-2. **Airport ride (departure):** Ride from the ETHDenver venue at 4850 Western Dr → DEN on Saturday Feb 21, leaving by ~2:00 PM to catch our 4:30 PM flight.
-3. **Daily conference transport:** We're attending the main ETHDenver conference at 4850 Western Dr all week. Need transport from our Airbnb to the venue and back each day.
-4. **Side events:** Find AI and blockchain side events during ETHDenver week (Feb 18–21). We especially want AI agent talks, hackathon workshops, and crypto/DeFi meetups. Check lu.ma, Eventbrite, and the ETHDenver side event schedule.
-5. **Restaurants:** Budget-friendly Chinese and Mexican spots near the venue or our Airbnb. College student budget — $10–15 per person max. We'll eat out every dinner.
-6. **Local transport:** For daily Denver travel, prioritize shortest travel time. Compare RTD light rail, bus, and rideshare.
-
-## Budget & Priorities
-- **Budget:** Tight — minimize costs wherever possible
-- **Pace:** Relaxed. Conference during the day, food and chill at night.
-- **Priority order:** ETHDenver main event → AI/crypto side events → good cheap food → exploring Denver
-
-Please build us a day-by-day itinerary from Wed Feb 18 through Sat Feb 21 with transport options, restaurant picks, and event recommendations. Name: Rachit, email: ${defaultHumanEmail}`,
+    from: humanFrom,
+    subject: body.subject || "Trip Request",
+    body: body.body || "Please plan my trip.",
   };
 
+  // Override body for special demo actions
   if (action === "additional-search") {
     humanEmail.body = "Do another round of ride searches for alternatives.";
   } else if (action === "scope-violation") {
