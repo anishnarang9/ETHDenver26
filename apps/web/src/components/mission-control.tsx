@@ -15,6 +15,7 @@ import {
   Check,
   Inbox,
   Send,
+  Edit3,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -40,8 +41,9 @@ export interface MissionControlProps {
   incomingEmail?: { from: string; subject: string; body: string };
 }
 
-const DEMO_SUBJECT = `ETHDenver Trip Planning — 6 Students from UMD (Feb 18–21)`;
-const DEMO_BODY = `Hi TripDesk! We're a group of 6 college students from the University of Maryland heading to ETHDenver 2025 and need help planning the full trip.
+const DEFAULT_FROM = "vagarwa4@terpmail.umd.edu";
+const DEFAULT_SUBJECT = "ETHDenver Trip Planning — 6 Students from UMD (Feb 18–21)";
+const DEFAULT_BODY = `Hi TripDesk! We're a group of 6 college students from the University of Maryland heading to ETHDenver 2025 and need help planning the full trip.
 
 ## Travel Details
 - **Group size:** 6 students (all early 20s, no mobility needs)
@@ -53,8 +55,8 @@ const DEMO_BODY = `Hi TripDesk! We're a group of 6 college students from the Uni
 1. **Airport ride (arrival):** Cheapest/fastest option from DEN → 2592 Meadowbrook Dr on Wednesday ~11 AM. We're 6 people so may need XL or two separate rides — compare Uber, Lyft, and shuttle options.
 2. **Airport ride (departure):** Ride from the ETHDenver venue at 4850 Western Dr → DEN on Saturday Feb 21, leaving by ~2:00 PM to catch our 4:30 PM flight.
 3. **Daily conference transport:** We're attending the main ETHDenver conference at 4850 Western Dr all week. Need transport from our Airbnb to the venue and back each day.
-4. **Side events:** Find AI and blockchain side events during ETHDenver week (Feb 18–21). We especially want AI agent talks, hackathon workshops, and crypto/DeFi meetups. Check lu.ma, Eventbrite, and the ETHDenver side event schedule.
-5. **Restaurants:** Budget-friendly Chinese and Mexican spots near the venue or our Airbnb. College student budget — $10–15 per person max. We'll eat out every dinner.
+4. **Side events:** Find AI and blockchain side events during ETHDenver week (Feb 18-21). We especially want AI agent talks, hackathon workshops, and crypto/DeFi meetups. Check lu.ma, Eventbrite, and the ETHDenver side event schedule.
+5. **Restaurants:** Budget-friendly Chinese and Mexican spots near the venue or our Airbnb. College student budget — $10-15 per person max. We'll eat out every dinner.
 6. **Local transport:** For daily Denver travel, prioritize shortest travel time. Compare RTD light rail, bus, and rideshare.
 
 ## Budget & Priorities
@@ -63,6 +65,19 @@ const DEMO_BODY = `Hi TripDesk! We're a group of 6 college students from the Uni
 - **Priority order:** ETHDenver main event → AI/crypto side events → good cheap food → exploring Denver
 
 Please build us a day-by-day itinerary from Wed Feb 18 through Sat Feb 21 with transport options, restaurant picks, and event recommendations.`;
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  background: "#0a0f1a",
+  border: "1px solid #1e293b",
+  borderRadius: 6,
+  padding: "6px 8px",
+  color: "#e2e8f0",
+  fontSize: "0.7rem",
+  fontFamily: "inherit",
+  outline: "none",
+  resize: "none" as const,
+};
 
 export function MissionControl({
   transactions,
@@ -77,6 +92,12 @@ export function MissionControl({
   const [showDemoButtons, setShowDemoButtons] = useState(false);
   const [copied, setCopied] = useState(false);
   const [sending, setSending] = useState(false);
+  const [showCompose, setShowCompose] = useState(false);
+
+  // Compose form state — starts empty so user types their own request
+  const [emailFrom, setEmailFrom] = useState(DEFAULT_FROM);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -94,23 +115,32 @@ export function MissionControl({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const sendDemoEmail = async () => {
+  const sendEmail = async () => {
+    if (!emailFrom || !emailSubject || !emailBody) {
+      setActionStatus("Please fill in all fields");
+      return;
+    }
     dispatch({ type: "RESET" });
     setSending(true);
-    setActionStatus("Sending email to orchestrator...");
+    setActionStatus("Sending real email to orchestrator...");
     try {
-      const res = await fetch(`${plannerUrl}/api/trigger`, {
+      const res = await fetch(`${plannerUrl}/api/send-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "plan-trip",
-          from: "vagarwa4@terpmail.umd.edu",
-          subject: DEMO_SUBJECT,
-          body: DEMO_BODY,
+          from: emailFrom,
+          subject: emailSubject,
+          body: emailBody,
         }),
       });
-      const data = await res.json() as { runId?: string };
-      setActionStatus(`Email sent → run ${data.runId?.slice(0, 8)}`);
+      const data = await res.json() as { ok?: boolean; method?: string; error?: string; proxy?: string };
+      if (data.ok) {
+        const method = data.method === "smtp" ? "SMTP" : "AgentMail relay";
+        setActionStatus(`Email sent via ${method} — waiting for planner to pick it up...`);
+        setShowCompose(false);
+      } else {
+        setActionStatus(`Send failed: ${data.error}`);
+      }
     } catch (err) {
       setActionStatus(`Error: ${(err as Error).message}`);
     } finally {
@@ -126,7 +156,7 @@ export function MissionControl({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
       });
-      const data = await res.json();
+      const data = await res.json() as { runId?: string };
       setActionStatus(`${action}: started (run: ${data.runId?.slice(0, 8)})`);
     } catch (err) {
       setActionStatus(`Error: ${(err as Error).message}`);
@@ -187,11 +217,11 @@ export function MissionControl({
         >
           <Inbox size={11} style={{ color: "#818cf8", flexShrink: 0 }} />
           <span style={{ fontSize: "0.68rem", color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-            Send an email to trigger TripDesk
+            Compose & send to TripDesk
           </span>
         </div>
 
-        {/* Email address + copy button */}
+        {/* Planner email address + copy button */}
         <div
           style={{
             display: "flex",
@@ -201,17 +231,20 @@ export function MissionControl({
             gap: 8,
           }}
         >
-          <span
-            style={{
-              color: "#818cf8",
-              fontFamily: "monospace",
-              fontSize: "0.72rem",
-              fontWeight: 600,
-              wordBreak: "break-all",
-            }}
-          >
-            {plannerEmail}
-          </span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+            <span style={{ fontSize: "0.6rem", color: "#475569" }}>To:</span>
+            <span
+              style={{
+                color: "#818cf8",
+                fontFamily: "monospace",
+                fontSize: "0.72rem",
+                fontWeight: 600,
+                wordBreak: "break-all",
+              }}
+            >
+              {plannerEmail}
+            </span>
+          </div>
           <motion.button
             onClick={handleCopy}
             whileTap={{ scale: 0.9 }}
@@ -237,10 +270,84 @@ export function MissionControl({
           </motion.button>
         </div>
 
-        {/* Send demo email button */}
+        {/* Compose form (collapsible) */}
+        <div style={{ borderTop: "1px solid #1e293b" }}>
+          <button
+            onClick={() => setShowCompose(!showCompose)}
+            style={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "7px 10px",
+              background: "none",
+              border: "none",
+              color: showCompose ? "#818cf8" : "#64748b",
+              fontSize: "0.65rem",
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              letterSpacing: "0.03em",
+            }}
+          >
+            <Edit3 size={10} />
+            {showCompose ? "Hide compose" : "Compose email"}
+            {showCompose ? <ChevronUp size={10} style={{ marginLeft: "auto" }} /> : <ChevronDown size={10} style={{ marginLeft: "auto" }} />}
+          </button>
+
+          <AnimatePresence>
+            {showCompose && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                style={{ overflow: "hidden" }}
+              >
+                <div style={{ padding: "0 10px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
+                  {/* From field */}
+                  <div>
+                    <label style={{ fontSize: "0.6rem", color: "#475569", display: "block", marginBottom: 2 }}>From</label>
+                    <input
+                      type="email"
+                      value={emailFrom}
+                      onChange={(e) => setEmailFrom(e.target.value)}
+                      placeholder="your@email.com"
+                      style={inputStyle}
+                    />
+                  </div>
+                  {/* Subject field */}
+                  <div>
+                    <label style={{ fontSize: "0.6rem", color: "#475569", display: "block", marginBottom: 2 }}>Subject</label>
+                    <input
+                      type="text"
+                      value={emailSubject}
+                      onChange={(e) => setEmailSubject(e.target.value)}
+                      placeholder="Trip planning request"
+                      style={inputStyle}
+                    />
+                  </div>
+                  {/* Body field */}
+                  <div>
+                    <label style={{ fontSize: "0.6rem", color: "#475569", display: "block", marginBottom: 2 }}>Body</label>
+                    <textarea
+                      value={emailBody}
+                      onChange={(e) => setEmailBody(e.target.value)}
+                      rows={6}
+                      placeholder="Describe your trip planning needs..."
+                      style={{ ...inputStyle, lineHeight: 1.4 }}
+                    />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Send email button */}
         <div style={{ borderTop: "1px solid #1e293b", padding: "8px 10px" }}>
           <motion.button
-            onClick={sendDemoEmail}
+            onClick={sendEmail}
             disabled={sending}
             whileTap={{ scale: 0.96 }}
             style={{
@@ -265,10 +372,10 @@ export function MissionControl({
             }}
           >
             <Send size={11} style={{ flexShrink: 0 }} />
-            {sending ? "Sending..." : "Send Demo Email → Orchestrator"}
+            {sending ? "Sending..." : "Send Email"}
           </motion.button>
-          <div style={{ marginTop: 4, fontSize: "0.6rem", color: "#334155", textAlign: "center" }}>
-            from: vagarwa4@terpmail.umd.edu
+          <div style={{ marginTop: 4, fontSize: "0.58rem", color: "#334155", textAlign: "center" }}>
+            {emailFrom} &rarr; {plannerEmail}
           </div>
         </div>
 
