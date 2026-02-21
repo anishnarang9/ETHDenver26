@@ -50,6 +50,13 @@ export interface SpawnedAgentInfo {
   sessionTxHash?: string;
 }
 
+export interface AgentResult {
+  agentId: string;
+  role: string;
+  result?: string;
+  status: "success" | "failed";
+}
+
 interface SSEState {
   emails: Email[];
   browsers: Record<string, BrowserPanel>;
@@ -60,6 +67,8 @@ interface SSEState {
   spawnedAgents: SpawnedAgentInfo[];
   orchestratorPhase: string;
   agentPlan: Array<{ role: string; needsBrowser: boolean; scopes: string[] }>;
+  agentResults: AgentResult[];
+  synthesisBody?: string;
   currentRunId?: string;
 }
 
@@ -90,6 +99,7 @@ const initialState: SSEState = {
   spawnedAgents: [],
   orchestratorPhase: "",
   agentPlan: [],
+  agentResults: [],
 };
 
 function sseReducer(state: SSEState, action: SSEAction): SSEState {
@@ -256,7 +266,14 @@ function sseReducer(state: SSEState, action: SSEAction): SSEState {
       };
     }
     case "AGENT_RESULTS": {
-      return state;
+      const p = action.payload.payload;
+      const results = (p.results as AgentResult[]) || [];
+      const body = (p.synthesisBody as string) || (p.body as string) || undefined;
+      return {
+        ...state,
+        agentResults: results.length > 0 ? results : state.agentResults,
+        synthesisBody: body || state.synthesisBody,
+      };
     }
     case "RESET":
       return { ...initialState };
