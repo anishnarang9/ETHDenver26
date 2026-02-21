@@ -9,15 +9,20 @@ export function WalletConnector(props: {
   const [status, setStatus] = useState("Wallet not connected");
 
   const connect = async () => {
-    if (!(window as unknown as { ethereum?: unknown }).ethereum) {
+    const win = window as unknown as {
+      ethereum?: Eip1193Provider & { providers?: (Eip1193Provider & { isMetaMask?: boolean })[] ; isMetaMask?: boolean };
+    };
+
+    if (!win.ethereum) {
       setStatus("No EVM wallet detected");
       return;
     }
 
+    // Prefer MetaMask when multiple wallet extensions are installed
+    const eth = win.ethereum.providers?.find((p) => p.isMetaMask) ?? win.ethereum;
+
     try {
-      const provider = new BrowserProvider(
-        (window as unknown as { ethereum: Eip1193Provider }).ethereum
-      );
+      const provider = new BrowserProvider(eth);
       const signer = await provider.getSigner();
       const address = await signer.getAddress();
       props.onConnected(address);
