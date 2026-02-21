@@ -42,29 +42,27 @@ export interface MissionControlProps {
 }
 
 const DEFAULT_FROM = "vagarwa4@terpmail.umd.edu";
-const DEFAULT_SUBJECT = "ETHDenver Trip Planning — 6 Students from UMD (Feb 18–21)";
-const DEFAULT_BODY = `Hi TripDesk! We're a group of 6 college students from the University of Maryland heading to ETHDenver 2025 and need help planning the full trip.
+const DEFAULT_SUBJECT = "ETHDenver Trip Planning - 6 UMD Students (Feb 18-21)";
+const DEFAULT_BODY = `Hi TripDesk! We are a group of 6 college students from UMD heading to ETHDenver 2025.
 
-## Travel Details
-- **Group size:** 6 students (all early 20s, no mobility needs)
-- **Outbound flight:** Wednesday Feb 18, arriving Denver International Airport (DEN) at ~11:00 AM local time
-- **Return flight:** Saturday Feb 21, 4:30 PM from DEN. We need to leave the ETHDenver venue at 4850 Western Dr by ~2:00 PM to make our flight.
-- **Accommodation:** Airbnb already booked at 2592 Meadowbrook Dr, Denver CO
+Travel Details:
+- Group size: 6 students
+- Outbound: Wed Feb 18, arriving DEN ~11 AM
+- Return: Sat Feb 21, 4:30 PM from DEN
+- Accommodation: Airbnb at 2592 Meadowbrook Dr, Denver CO
+- ETHDenver venue: 4850 Western Dr
 
-## What We Need
-1. **Airport ride (arrival):** Cheapest/fastest option from DEN → 2592 Meadowbrook Dr on Wednesday ~11 AM. We're 6 people so may need XL or two separate rides — compare Uber, Lyft, and shuttle options.
-2. **Airport ride (departure):** Ride from the ETHDenver venue at 4850 Western Dr → DEN on Saturday Feb 21, leaving by ~2:00 PM to catch our 4:30 PM flight.
-3. **Daily conference transport:** We're attending the main ETHDenver conference at 4850 Western Dr all week. Need transport from our Airbnb to the venue and back each day.
-4. **Side events:** Find AI and blockchain side events during ETHDenver week (Feb 18-21). We especially want AI agent talks, hackathon workshops, and crypto/DeFi meetups. Check lu.ma, Eventbrite, and the ETHDenver side event schedule.
-5. **Restaurants:** Budget-friendly Chinese and Mexican spots near the venue or our Airbnb. College student budget — $10-15 per person max. We'll eat out every dinner.
-6. **Local transport:** For daily Denver travel, prioritize shortest travel time. Compare RTD light rail, bus, and rideshare.
+What We Need:
+1. Airport rides (arrival + departure) for 6 people
+2. Daily transport: Airbnb to ETHDenver venue and back
+3. Side events: AI and blockchain events during ETHDenver week
+4. Restaurants: Budget-friendly Chinese and Mexican near venue, $10-15 per person
 
-## Budget & Priorities
-- **Budget:** Tight — minimize costs wherever possible
-- **Pace:** Relaxed. Conference during the day, food and chill at night.
-- **Priority order:** ETHDenver main event → AI/crypto side events → good cheap food → exploring Denver
+Budget: Tight college student budget
+Priority: ETHDenver main event > AI/crypto side events > cheap food
 
-Please build us a day-by-day itinerary from Wed Feb 18 through Sat Feb 21 with transport options, restaurant picks, and event recommendations.`;
+Please build a day-by-day itinerary Wed-Sat.
+Name: Rachit, email: vagarwa4@terpmail.umd.edu`;
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
