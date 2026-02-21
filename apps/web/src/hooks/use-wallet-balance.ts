@@ -34,8 +34,13 @@ export function useWalletBalance(
     const poll = async () => {
       setIsPolling(true);
       try {
-        const raw = await token.balanceOf(address);
-        const formatted = (Number(raw) / 1e18).toFixed(2);
+        // Check both native KITE and ERC-20, use whichever is higher
+        let nativeVal = 0;
+        let erc20Val = 0;
+        try { const nb = await provider.getBalance(address); nativeVal = Number(nb) / 1e18; } catch { /* */ }
+        try { const raw = await token.balanceOf(address); erc20Val = Number(raw) / 1e18; } catch { /* */ }
+        const best = Math.max(nativeVal, erc20Val);
+        const formatted = best.toFixed(2);
 
         const prev = prevRef.current;
         const prevNum = parseFloat(prev);
