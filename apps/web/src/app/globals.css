@@ -162,6 +162,29 @@ button.danger {
   gap: 10px;
 }
 
+/* ============ Ops-center ambient keyframes ============ */
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 4px 1px var(--glow-color, #3b82f6); }
+  50% { box-shadow: 0 0 18px 4px var(--glow-color, #3b82f6); }
+}
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+@keyframes border-rotate {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
 @media (max-width: 940px) {
   .grid {
     grid-template-columns: 1fr;
