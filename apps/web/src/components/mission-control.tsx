@@ -36,11 +36,13 @@ export interface MissionControlProps {
   eventbotAddress?: string;
 }
 
-const DEFAULT_EMAIL_BODY = `Hi TripDesk! We're a group of 6 college students from the University of Maryland heading to ETHDenver.
+const DEFAULT_EMAIL_BODY = `Hi TripDesk! We're 6 college students from UMD heading to ETHDenver.
 
-We're flying into Denver on Wed Feb 18 at 11 AM. Need a ride from DEN airport to 2592 Meadowbrook Dr. Attending ETHDenver + AI side events. Want budget Chinese & Mexican restaurants for dinner. Keep it cheap!
+Flying into Denver Wed Feb 18 at 11 AM (DEN). Need a ride to our Airbnb at 2592 Meadowbrook Dr. Attending ETHDenver at 4850 Western Dr + AI side events. Want budget Chinese & Mexican restaurants ($10-15/person).
 
-Plan our Wed-Sun itinerary please.`;
+Return flight: Sat Feb 21 at 4:30 PM from DEN — need a ride from the venue to the airport by 2 PM.
+
+Plan our Wed-Sat itinerary please!`;
 
 export function MissionControl({
   transactions,
@@ -140,14 +142,12 @@ export function MissionControl({
         background: "#111827",
         borderRadius: "12px",
         border: "1px solid #1e293b",
-        padding: "14px",
+        padding: "12px",
         display: "flex",
         flexDirection: "column",
-        gap: "12px",
+        gap: "8px",
       }}
     >
-      <h3 style={{ margin: 0, fontSize: "0.9rem", color: "#94a3b8" }}>Mission Control</h3>
-
       {/* ── Email Compose ── */}
       <div
         style={{
@@ -162,15 +162,15 @@ export function MissionControl({
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 8,
-            padding: "8px 12px",
+            gap: 6,
+            padding: "6px 10px",
             borderBottom: "1px solid #1e293b",
-            fontSize: "0.72rem",
+            fontSize: "0.68rem",
           }}
         >
-          <Mail size={12} style={{ color: "#818cf8", flexShrink: 0 }} />
+          <Mail size={10} style={{ color: "#818cf8", flexShrink: 0 }} />
           <span style={{ color: "#64748b" }}>To:</span>
-          <span style={{ color: "#818cf8", fontFamily: "monospace", fontSize: "0.68rem" }}>
+          <span style={{ color: "#818cf8", fontFamily: "monospace", fontSize: "0.62rem" }}>
             {plannerEmail || "tripdesk-planner@agentmail.to"}
           </span>
         </div>
@@ -182,21 +182,22 @@ export function MissionControl({
           placeholder="Describe your trip..."
           style={{
             width: "100%",
-            minHeight: 100,
-            padding: "10px 12px",
+            minHeight: 72,
+            maxHeight: 120,
+            padding: "8px 10px",
             background: "transparent",
             border: "none",
             color: "#e2e8f0",
-            fontSize: "0.78rem",
+            fontSize: "0.72rem",
             fontFamily: "inherit",
-            lineHeight: 1.5,
+            lineHeight: 1.4,
             resize: "vertical",
             outline: "none",
           }}
         />
 
         {/* Send button */}
-        <div style={{ padding: "0 12px 10px" }}>
+        <div style={{ padding: "0 10px 8px" }}>
           <motion.button
             onClick={handleSendEmail}
             disabled={sending || !emailBody.trim()}
@@ -204,7 +205,7 @@ export function MissionControl({
             whileTap={sending ? {} : { scale: 0.985 }}
             style={{
               width: "100%",
-              padding: "10px",
+              padding: "8px",
               borderRadius: 8,
               border: "none",
               background: sending
@@ -212,19 +213,19 @@ export function MissionControl({
                 : "linear-gradient(135deg, #3b82f6, #818cf8)",
               color: "#fff",
               fontWeight: 600,
-              fontSize: "0.8rem",
+              fontSize: "0.72rem",
               cursor: sending ? "not-allowed" : "pointer",
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: 6,
+              gap: 5,
               fontFamily: "inherit",
               boxShadow: sending
                 ? "none"
-                : "0 4px 14px rgba(59,130,246,0.25), inset 0 1px 0 rgba(255,255,255,0.1)",
+                : "0 2px 10px rgba(59,130,246,0.2), inset 0 1px 0 rgba(255,255,255,0.08)",
             }}
           >
-            <Send size={14} />
+            <Send size={12} />
             {sending ? "Sending..." : "Send to Orchestrator"}
           </motion.button>
         </div>
@@ -262,91 +263,75 @@ export function MissionControl({
             transition={{ duration: 0.2 }}
             style={{ overflow: "hidden" }}
           >
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
               <button
                 onClick={() => triggerAction("additional-search")}
                 style={{
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "none",
-                  background: "#8b5cf6",
-                  color: "#fff",
-                  fontWeight: 600,
-                  fontSize: "0.78rem",
+                  padding: "7px 8px",
+                  borderRadius: "6px",
+                  border: "1px solid #334155",
+                  background: "transparent",
+                  color: "#94a3b8",
+                  fontWeight: 500,
+                  fontSize: "0.68rem",
                   cursor: "pointer",
                   display: "inline-flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  gap: "6px",
+                  gap: "4px",
                   fontFamily: "inherit",
                 }}
               >
-                <RefreshCw size={14} /> Additional Search
+                <RefreshCw size={11} /> Search
               </button>
               <button
                 onClick={() => triggerAction("scope-violation")}
                 style={{
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "none",
-                  background: "#f59e0b",
-                  color: "#fff",
-                  fontWeight: 600,
-                  fontSize: "0.78rem",
+                  padding: "7px 8px",
+                  borderRadius: "6px",
+                  border: "1px solid #f59e0b30",
+                  background: "transparent",
+                  color: "#f59e0b",
+                  fontWeight: 500,
+                  fontSize: "0.68rem",
                   cursor: "pointer",
                   display: "inline-flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  gap: "6px",
+                  gap: "4px",
                   fontFamily: "inherit",
                 }}
               >
-                <ShieldAlert size={14} /> Scope Violation
+                <ShieldAlert size={11} /> Scope Test
               </button>
-              <div style={{ position: "relative", gridColumn: "1 / -1" }}>
-                <button
-                  onClick={handleRevoke}
-                  disabled={!resolvedRevokeAddress}
-                  title={
-                    resolvedRevokeAddress
-                      ? `Revoke passport for ${resolvedRevokeAddress.slice(0, 6)}...${resolvedRevokeAddress.slice(-4)}`
-                      : "No agent address configured"
-                  }
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    borderRadius: "8px",
-                    border: "none",
-                    background: resolvedRevokeAddress ? "#ef4444" : "#7f1d1d",
-                    color: "#fff",
-                    fontWeight: 600,
-                    fontSize: "0.78rem",
-                    cursor: resolvedRevokeAddress ? "pointer" : "not-allowed",
-                    opacity: resolvedRevokeAddress ? 1 : 0.6,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "6px",
-                    fontFamily: "inherit",
-                  }}
-                >
-                  <ShieldOff size={14} /> Revoke EventBot
-                </button>
-                {!resolvedRevokeAddress && (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "4px",
-                      marginTop: "4px",
-                      fontSize: "0.62rem",
-                      color: "#f59e0b",
-                    }}
-                  >
-                    <AlertTriangle size={10} /> No agent address configured
-                  </div>
-                )}
-              </div>
+              <button
+                onClick={handleRevoke}
+                disabled={!resolvedRevokeAddress}
+                title={
+                  resolvedRevokeAddress
+                    ? `Revoke passport for ${resolvedRevokeAddress.slice(0, 6)}...${resolvedRevokeAddress.slice(-4)}`
+                    : "No agent address configured"
+                }
+                style={{
+                  gridColumn: "1 / -1",
+                  padding: "7px 8px",
+                  borderRadius: "6px",
+                  border: "1px solid #ef444440",
+                  background: "transparent",
+                  color: resolvedRevokeAddress ? "#ef4444" : "#7f1d1d",
+                  fontWeight: 500,
+                  fontSize: "0.68rem",
+                  cursor: resolvedRevokeAddress ? "pointer" : "not-allowed",
+                  opacity: resolvedRevokeAddress ? 1 : 0.5,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "4px",
+                  fontFamily: "inherit",
+                }}
+              >
+                <ShieldOff size={11} /> Revoke Passport
+              </button>
             </div>
           </motion.div>
         )}
@@ -375,8 +360,14 @@ export function MissionControl({
       </AnimatePresence>
 
       {/* Transaction Feed */}
-      <h4 style={{ margin: 0, fontSize: "0.8rem", color: "#64748b" }}>Transactions</h4>
-      <TransactionFeed transactions={transactions} />
+      {transactions.length > 0 && (
+        <>
+          <h4 style={{ margin: 0, fontSize: "0.68rem", color: "#475569", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Transactions
+          </h4>
+          <TransactionFeed transactions={transactions} />
+        </>
+      )}
     </div>
   );
 }

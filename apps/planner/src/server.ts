@@ -149,24 +149,24 @@ app.post("/api/trigger", async (request) => {
 
 ## Travel Details
 - **Group size:** 6 students (all early 20s, no mobility needs)
-- **Departure:** Wednesday Feb 18, 8:00 AM from DCA (Reagan National Airport)
-- **Arrival:** Denver International Airport (DEN) at ~11:00 AM local time
-- **Return:** Sunday Feb 23 (flexible on exact time)
+- **Outbound flight:** Wednesday Feb 18, 8:00 AM from DCA (Reagan National Airport) → Denver International Airport (DEN), arriving ~11:00 AM local time
+- **Return flight:** Saturday Feb 21, 4:30 PM from DEN back to DCA. We need to leave the ETHDenver venue at 4850 Western Dr by ~2:00 PM to get to the airport in time.
 - **Accommodation:** Airbnb already booked at 2592 Meadowbrook Dr, Denver CO
 
 ## What We Need
-1. **Airport ride:** Cheapest/fastest ride from Denver International Airport (DEN) to 2592 Meadowbrook Dr on Wednesday ~11 AM. Compare Uber, Lyft, shuttle options. We're 6 people so may need XL or two rides.
-2. **ETHDenver conference:** We're attending the main ETHDenver conference at the National Western Complex. Need daily transport from our Airbnb to the venue and back.
-3. **Side events:** Find AI and blockchain technology side events happening during ETHDenver week (Feb 18-23). We especially want AI agent talks, hackathon workshops, and crypto/DeFi meetups. Check lu.ma, eventbrite, and ETHDenver side event lists.
-4. **Restaurants:** Find budget-friendly Chinese and Mexican restaurants near the ETHDenver venue or near our Airbnb. We're college students so keep it cheap ($10-15 per person max). We'll eat out every dinner.
-5. **Local transport:** For getting around Denver during the week, prioritize shortest travel time. Compare RTD light rail, bus, rideshare.
+1. **Airport ride (arrival):** Cheapest/fastest ride from Denver International Airport (DEN) to 2592 Meadowbrook Dr on Wednesday ~11 AM. Compare Uber, Lyft, shuttle options. We're 6 people so may need XL or two rides.
+2. **Airport ride (departure):** Ride from the ETHDenver venue at 4850 Western Dr to Denver International Airport (DEN) on Saturday Feb 21, leaving by ~2:00 PM to catch our 4:30 PM flight.
+3. **ETHDenver conference:** We're attending the main ETHDenver conference at 4850 Western Dr. Need daily transport from our Airbnb to the venue and back.
+4. **Side events:** Find AI and blockchain technology side events happening during ETHDenver week (Feb 18-21). We especially want AI agent talks, hackathon workshops, and crypto/DeFi meetups. Check lu.ma, eventbrite, and ETHDenver side event lists.
+5. **Restaurants:** Find budget-friendly Chinese and Mexican restaurants near the ETHDenver venue or near our Airbnb. We're college students so keep it cheap ($10-15 per person max). We'll eat out every dinner.
+6. **Local transport:** For getting around Denver during the week, prioritize shortest travel time. Compare RTD light rail, bus, rideshare.
 
 ## Budget & Style
 - **Budget:** College student tight -- minimize costs everywhere
 - **Pace:** Relaxed. We don't want to rush. Conference during the day, food and chill at night.
 - **Priorities:** 1) ETHDenver main event 2) AI/crypto side events 3) Good cheap food 4) Exploring Denver if time permits
 
-Please build us a day-by-day itinerary from Wed Feb 18 through Sun Feb 23 with transport options, restaurant picks, and event recommendations. Name: Rachit, email: ${defaultHumanEmail}`,
+Please build us a day-by-day itinerary from Wed Feb 18 through Sat Feb 21 (departure day) with transport options, restaurant picks, and event recommendations. Name: Rachit, email: ${defaultHumanEmail}`,
   };
 
   if (action === "additional-search") {
