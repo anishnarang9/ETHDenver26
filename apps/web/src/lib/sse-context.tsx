@@ -1,48 +1,20 @@
 "use client";
 
-import { createContext, useContext, useReducer, useCallback, type ReactNode } from "react";
-import { useSSE, type SSEMessage } from "../hooks/use-sse";
-
-interface Email {
-  id: string;
-  from: string;
-  to?: string;
-  subject: string;
-  body: string;
-  timestamp: string;
-  agentId: string;
-}
-
-interface BrowserPanel {
-  agentId: string;
-  liveViewUrl?: string;
-  status: "standby" | "active" | "closed" | "revoked";
-  thought?: string;
-}
-
-interface EnforcementStep {
-  step: number;
-  name: string;
-  status: "pending" | "pass" | "fail";
-  detail?: string;
-}
-
-interface Transaction {
-  id: string;
-  from: string;
-  to: string;
-  amount: string;
-  method: string;
-  txHash?: string;
-  status: "pending" | "complete" | "failed";
-  timestamp: string;
-}
+import { createContext, useCallback, useContext, useMemo, useReducer, type ReactNode } from "react";
+import { useSSE } from "../hooks/use-sse";
+import type {
+  BrowserPanelState,
+  EmailEvent,
+  EnforcementStep,
+  SSEMessage,
+  TransactionEvent,
+} from "./types";
 
 interface SSEState {
-  emails: Email[];
-  browsers: Record<string, BrowserPanel>;
+  emails: EmailEvent[];
+  browsers: Record<string, BrowserPanelState>;
   enforcementSteps: EnforcementStep[];
-  transactions: Transaction[];
+  transactions: TransactionEvent[];
   thoughts: Record<string, string>;
   agentStatuses: Record<string, string>;
   currentRunId?: string;
@@ -58,6 +30,7 @@ type SSEAction =
   | { type: "PAYMENT_COMPLETE"; payload: SSEMessage }
   | { type: "PAYMENT_FAILED"; payload: SSEMessage }
   | { type: "AGENT_STATUS"; payload: SSEMessage }
+  | { type: "MERGE_ENFORCEMENT"; steps: EnforcementStep[] }
   | { type: "RESET" };
 
 const initialState: SSEState = {
@@ -73,23 +46,21 @@ const initialState: SSEState = {
   agentStatuses: {},
 };
 
-function sseReducer(state: SSEState, action: SSEAction): SSEState {
+function reducer(state: SSEState, action: SSEAction): SSEState {
   switch (action.type) {
     case "EMAIL_RECEIVED":
     case "EMAIL_SENT": {
       const p = action.payload.payload;
-      return {
-        ...state,
-        emails: [...state.emails, {
-          id: `email-${Date.now()}-${Math.random()}`,
-          from: (p.from as string) || action.payload.agentId,
-          to: p.to as string,
-          subject: (p.subject as string) || "",
-          body: (p.body as string) || "",
-          timestamp: new Date().toISOString(),
-          agentId: action.payload.agentId,
-        }],
+      const item: EmailEvent = {
+        id: `mail-${Date.now()}-${Math.random()}`,
+        from: (p.from as string) || action.payload.agentId,
+        to: p.to as string,
+        subject: (p.subject as string) || "",
+        body: (p.body as string) || "",
+        timestamp: new Date().toISOString(),
+        agentId: (action.payload.agentId as EmailEvent["agentId"]) || "planner",
       };
+      return { ...state, emails: [...state.emails, item] };
     }
     case "BROWSER_SESSION": {
       const p = action.payload.payload;
@@ -99,24 +70,27 @@ function sseReducer(state: SSEState, action: SSEAction): SSEState {
         browsers: {
           ...state.browsers,
           [agentId]: {
-            agentId,
+            agentId: agentId as BrowserPanelState["agentId"],
             liveViewUrl: (p.liveViewUrl as string) || state.browsers[agentId]?.liveViewUrl,
-            status: (p.status as BrowserPanel["status"]) || "active",
+            status: (p.status as BrowserPanelState["status"]) || "active",
+            sessionId: p.sessionId as string,
           },
         },
       };
     }
-    case "LLM_THINKING": {
+    case "LLM_THINKING":
       return {
         ...state,
-        thoughts: { ...state.thoughts, [action.payload.agentId]: action.payload.payload.text as string },
+        thoughts: {
+          ...state.thoughts,
+          [action.payload.agentId]: (action.payload.payload.text as string) || "",
+        },
       };
-    }
     case "ENFORCEMENT_STEP": {
       const p = action.payload.payload;
       const step: EnforcementStep = {
         step: (p.step as number) || state.enforcementSteps.length + 1,
-        name: (p.name as string) || (p.eventType as string) || "",
+        name: (p.name as string) || (p.eventType as string) || "Unknown",
         status: (p.status as EnforcementStep["status"]) || "pass",
         detail: p.detail as string,
       };
@@ -124,45 +98,49 @@ function sseReducer(state: SSEState, action: SSEAction): SSEState {
     }
     case "PAYMENT_START": {
       const p = action.payload.payload;
-      return {
-        ...state,
-        transactions: [...state.transactions, {
-          id: `tx-${Date.now()}-${Math.random()}`,
-          from: "planner",
-          to: (p.target as string) || "",
-          amount: (p.amount as string) || "",
-          method: (p.method as string) || "pending",
-          status: "pending",
-          timestamp: new Date().toISOString(),
-        }],
+      const tx: TransactionEvent = {
+        id: `tx-${Date.now()}-${Math.random()}`,
+        from: "planner",
+        to: (p.target as string) || "service",
+        amount: (p.amount as string) || "0",
+        method: (p.method as string) || "pending",
+        status: "pending",
+        timestamp: new Date().toISOString(),
       };
+      return { ...state, transactions: [...state.transactions, tx] };
     }
     case "PAYMENT_COMPLETE": {
       const p = action.payload.payload;
       const txs = [...state.transactions];
-      const last = [...txs].reverse().find((t: Transaction) => t.status === "pending");
-      if (last) {
-        last.status = "complete";
-        last.txHash = p.txHash as string;
-        last.method = (p.method as string) || last.method;
-        last.amount = (p.amount as string) || last.amount;
+      const pending = [...txs].reverse().find((tx) => tx.status === "pending");
+      if (pending) {
+        pending.status = "complete";
+        pending.txHash = p.txHash as string;
+        pending.amount = (p.amount as string) || pending.amount;
+        pending.method = (p.method as string) || pending.method;
       }
       return { ...state, transactions: txs };
     }
     case "PAYMENT_FAILED": {
       const txs = [...state.transactions];
-      const last = [...txs].reverse().find((t: Transaction) => t.status === "pending");
-      if (last) last.status = "failed";
+      const pending = [...txs].reverse().find((tx) => tx.status === "pending");
+      if (pending) {
+        pending.status = "failed";
+      }
       return { ...state, transactions: txs };
     }
-    case "AGENT_STATUS": {
+    case "AGENT_STATUS":
       return {
         ...state,
-        agentStatuses: { ...state.agentStatuses, [action.payload.agentId]: action.payload.payload.status as string },
+        agentStatuses: {
+          ...state.agentStatuses,
+          [action.payload.agentId]: (action.payload.payload.status as string) || "idle",
+        },
       };
-    }
+    case "MERGE_ENFORCEMENT":
+      return { ...state, enforcementSteps: action.steps };
     case "RESET":
-      return { ...initialState };
+      return initialState;
     default:
       return state;
   }
@@ -172,13 +150,17 @@ const SSEContext = createContext<{
   state: SSEState;
   dispatch: React.Dispatch<SSEAction>;
   switchUrl: (url: string) => void;
-}>({ state: initialState, dispatch: () => {}, switchUrl: () => {} });
+}>({
+  state: initialState,
+  dispatch: () => undefined,
+  switchUrl: () => undefined,
+});
 
 export function SSEProvider({ url, children }: { url: string; children: ReactNode }) {
-  const [state, dispatch] = useReducer(sseReducer, initialState);
+  const [state, dispatch] = useReducer(reducer, initialState);
 
-  const handleMessage = useCallback((msg: SSEMessage) => {
-    const typeMap: Record<string, SSEAction["type"]> = {
+  const onMessage = useCallback((msg: SSEMessage) => {
+    const map: Record<string, SSEAction["type"]> = {
       email_received: "EMAIL_RECEIVED",
       email_sent: "EMAIL_SENT",
       browser_session: "BROWSER_SESSION",
@@ -189,19 +171,17 @@ export function SSEProvider({ url, children }: { url: string; children: ReactNod
       payment_failed: "PAYMENT_FAILED",
       agent_status: "AGENT_STATUS",
     };
-    const actionType = typeMap[msg.type];
-    if (actionType) {
-      dispatch({ type: actionType, payload: msg } as SSEAction);
+
+    const type = map[msg.type];
+    if (type) {
+      dispatch({ type, payload: msg } as SSEAction);
     }
   }, []);
 
-  const { switchUrl } = useSSE(url, handleMessage);
+  const { switchUrl } = useSSE(url, onMessage);
 
-  return (
-    <SSEContext.Provider value={{ state, dispatch, switchUrl }}>
-      {children}
-    </SSEContext.Provider>
-  );
+  const value = useMemo(() => ({ state, dispatch, switchUrl }), [state, switchUrl]);
+  return <SSEContext.Provider value={value}>{children}</SSEContext.Provider>;
 }
 
 export const useSSEState = () => useContext(SSEContext);

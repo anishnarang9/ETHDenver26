@@ -1,54 +1,73 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
-
-export interface SSEMessage {
-  type: string;
-  agentId: string;
-  payload: Record<string, unknown>;
-  runId?: string;
-  offsetMs?: number;
-}
+import { useCallback, useEffect, useRef } from "react";
+import type { SSEMessage } from "../lib/types";
 
 export function useSSE(url: string, onMessage: (msg: SSEMessage) => void) {
-  const esRef = useRef<EventSource | null>(null);
-  const onMessageRef = useRef(onMessage);
-  onMessageRef.current = onMessage;
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handlerRef = useRef(onMessage);
+  handlerRef.current = onMessage;
 
   const connect = useCallback((targetUrl: string) => {
-    if (esRef.current) {
-      esRef.current.close();
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
     }
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    let source: EventSource;
+    try {
+      source = new EventSource(targetUrl);
+    } catch {
+      reconnectTimerRef.current = setTimeout(() => connect(targetUrl), 3000);
+      return () => undefined;
+    }
+    eventSourceRef.current = source;
 
-    const es = new EventSource(targetUrl);
-    esRef.current = es;
-
-    const handler = (e: MessageEvent) => {
+    const parse = (event: MessageEvent) => {
       try {
-        const data = JSON.parse(e.data) as SSEMessage;
-        onMessageRef.current(data);
-      } catch { /* ignore parse errors */ }
+        const msg = JSON.parse(event.data) as SSEMessage;
+        handlerRef.current(msg);
+      } catch {
+        // ignore malformed events
+      }
     };
 
     const eventTypes = [
-      "email_received", "email_sent", "llm_thinking", "llm_tool_call",
-      "browser_session", "browser_screenshot", "enforcement_step",
-      "payment_start", "payment_complete", "payment_failed",
-      "wallet_update", "agent_status", "error", "replay_complete",
+      "email_received",
+      "email_sent",
+      "llm_thinking",
+      "llm_tool_call",
+      "browser_session",
+      "browser_screenshot",
+      "enforcement_step",
+      "payment_start",
+      "payment_complete",
+      "payment_failed",
+      "wallet_update",
+      "agent_status",
+      "error",
+      "replay_complete",
     ];
 
-    for (const type of eventTypes) {
-      es.addEventListener(type, handler);
+    for (const eventType of eventTypes) {
+      source.addEventListener(eventType, parse);
     }
 
-    es.onerror = () => {
-      es.close();
-      setTimeout(() => connect(targetUrl), 3000);
+    source.onerror = () => {
+      source.close();
+      reconnectTimerRef.current = setTimeout(() => connect(targetUrl), 3000);
     };
 
     return () => {
-      es.close();
-      esRef.current = null;
+      source.close();
+      eventSourceRef.current = null;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -57,9 +76,12 @@ export function useSSE(url: string, onMessage: (msg: SSEMessage) => void) {
     return cleanup;
   }, [url, connect]);
 
-  const switchUrl = useCallback((newUrl: string) => {
-    connect(newUrl);
-  }, [connect]);
+  const switchUrl = useCallback(
+    (newUrl: string) => {
+      connect(newUrl);
+    },
+    [connect]
+  );
 
   return { switchUrl };
 }

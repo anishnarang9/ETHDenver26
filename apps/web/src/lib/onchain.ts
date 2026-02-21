@@ -50,7 +50,9 @@ const assertExpectedChain = (expectedChainId: string | undefined, actualChainId:
   }
 
   if (Number(actualChainId) !== Number(expectedChainId)) {
-    throw new Error(`Wrong network in wallet. Expected chainId ${expectedChainId}, got ${actualChainId.toString()}.`);
+    throw new Error(
+      `Wrong network in wallet. Expected chainId ${expectedChainId}, got ${actualChainId.toString()}.`
+    );
   }
 };
 
@@ -69,13 +71,6 @@ const buildExplorerLink = (txHash: string): string | null => {
     return null;
   }
   return `${base.replace(/\/$/, "")}/tx/${txHash}`;
-};
-
-export const onchainTestUtils = {
-  getEthereum,
-  getRequiredAddress,
-  assertExpectedChain,
-  buildExplorerLink,
 };
 
 export const upsertPassportOnchain = async (
