@@ -184,6 +184,43 @@ function appendEmailAndEdge(
   };
 }
 
+function appendReceivedEmail(
+  state: SSEState,
+  msg: SSEMessage,
+  {
+    from,
+    to,
+    subject,
+    body,
+    threadId,
+  }: { from: string; to?: string; subject: string; body: string; threadId?: string }
+): SSEState {
+  const senderAgentId = from ? findAgentByInbox(state, from) || from : "unknown";
+  const edge: EmailEdge = {
+    id: `edge-${Date.now()}-${Math.random()}`,
+    fromAgentId: senderAgentId,
+    toAgentId: msg.agentId,
+    subject,
+    timestamp: Date.now(),
+    threadId,
+  };
+  const email: EmailEvent = {
+    id: `mail-${Date.now()}-${Math.random()}`,
+    from,
+    to,
+    subject,
+    body,
+    timestamp: new Date().toISOString(),
+    agentId: (senderAgentId === "human" ? "human" : msg.agentId) as EmailEvent["agentId"],
+  };
+
+  return {
+    ...state,
+    emails: [...state.emails, email],
+    emailEdges: [...state.emailEdges, edge],
+  };
+}
+
 function reducer(state: SSEState, action: SSEAction): SSEState {
   switch (action.type) {
     case "EMAIL_RECEIVED":
@@ -206,7 +243,16 @@ function reducer(state: SSEState, action: SSEAction): SSEState {
         threadId: payload.threadId as string | undefined,
       });
     }
-    case "AGENT_EMAIL_RECEIVED":
+    case "AGENT_EMAIL_RECEIVED": {
+      const payload = action.payload.payload;
+      return appendReceivedEmail(state, action.payload, {
+        from: (payload.from as string) || "unknown",
+        to: payload.to as string | undefined,
+        subject: (payload.subject as string) || "",
+        body: (payload.body as string) || "",
+        threadId: payload.threadId as string | undefined,
+      });
+    }
     case "ORCHESTRATOR_DECISION":
       return state;
     case "BROWSER_SESSION": {

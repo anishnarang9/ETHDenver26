@@ -48,6 +48,7 @@ export interface SpawnedAgentInfo {
   role: string;
   address?: string;
   status: string;
+  needsBrowser?: boolean;
   step?: string;
   inboxAddress?: string;
   fundingTxHash?: string;

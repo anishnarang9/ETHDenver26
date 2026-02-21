@@ -8,7 +8,7 @@ export default function TimelinePage() {
         title="Timeline and Evidence"
         subtitle="Inspect gateway event history by action, drill into enforcement traces, and fetch full action/passport payloads."
       />
-      <TimelineWorkbench defaultAgent={process.env.NEXT_PUBLIC_PLANNER_ADDRESS || ""} />
+      <TimelineWorkbench />
     </>
   );
 }

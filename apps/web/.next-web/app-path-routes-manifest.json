@@ -1,0 +1,9 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/favicon.ico/route": "/favicon.ico",
+  "/console/page": "/console",
+  "/guardrails/page": "/guardrails",
+  "/page": "/",
+  "/timeline/page": "/timeline",
+  "/setup/page": "/setup"
+}

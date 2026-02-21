@@ -53,6 +53,10 @@ body {
   background: radial-gradient(circle at 12% -5%, #1a2534 0%, #0f1722 36%, #0b1017 64%, #090d13 100%);
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   font-family: var(--font-body), "IBM Plex Sans", "Segoe UI", sans-serif;
 }

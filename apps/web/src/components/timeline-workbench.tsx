@@ -4,25 +4,67 @@ import { useEffect, useMemo, useState } from "react";
 import { getAction, getPassport, getTimeline } from "../lib/api";
 import type { TimelineEvent } from "../lib/types";
 
-export function TimelineWorkbench({ defaultAgent }: { defaultAgent: string }) {
-  const [agent, setAgent] = useState(defaultAgent);
+export function TimelineWorkbench() {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [selectedActionId, setSelectedActionId] = useState("");
   const [output, setOutput] = useState("No action selected.");
   const [status, setStatus] = useState("idle");
+  const [passportAddress, setPassportAddress] = useState(process.env.NEXT_PUBLIC_PLANNER_ADDRESS || "");
 
   useEffect(() => {
-    if (!agent) {
-      return;
-    }
-
     let active = true;
     const poll = async () => {
       try {
-        const payload = await getTimeline(agent);
+        const addressSet = new Set<string>();
+        if (process.env.NEXT_PUBLIC_PLANNER_ADDRESS) addressSet.add(process.env.NEXT_PUBLIC_PLANNER_ADDRESS);
+        if (process.env.NEXT_PUBLIC_RIDER_ADDRESS) addressSet.add(process.env.NEXT_PUBLIC_RIDER_ADDRESS);
+        if (process.env.NEXT_PUBLIC_FOODIE_ADDRESS) addressSet.add(process.env.NEXT_PUBLIC_FOODIE_ADDRESS);
+        if (process.env.NEXT_PUBLIC_EVENTBOT_ADDRESS) addressSet.add(process.env.NEXT_PUBLIC_EVENTBOT_ADDRESS);
+
+        const plannerUrl = process.env.NEXT_PUBLIC_PLANNER_URL || "http://localhost:4005";
+        try {
+          const response = await fetch(`${plannerUrl}/api/agents`, { cache: "no-store" });
+          if (response.ok) {
+            const data = (await response.json()) as {
+              agents?: Array<{ address?: string }>;
+            };
+            for (const entry of data.agents || []) {
+              if (entry.address) {
+                addressSet.add(entry.address);
+              }
+            }
+          }
+        } catch {
+          // optional source
+        }
+
+        const addresses = Array.from(addressSet).filter(Boolean);
+        if (addresses.length === 0) {
+          if (active) {
+            setEvents([]);
+            setStatus("No agent addresses available to query.");
+          }
+          return;
+        }
+
+        const results = await Promise.allSettled(addresses.map((address) => getTimeline(address)));
+        const merged: TimelineEvent[] = [];
+        for (const result of results) {
+          if (result.status === "fulfilled") {
+            merged.push(...(result.value.events as TimelineEvent[]));
+          }
+        }
+
+        const deduped = Array.from(new Map(merged.map((event) => [event.id, event])).values()).sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+
         if (active) {
-          setEvents(payload.events as TimelineEvent[]);
-          setStatus(`Loaded ${payload.events.length} events`);
+          setEvents(deduped);
+          setStatus(`Loaded ${deduped.length} events across ${addresses.length} agents`);
+          if (addresses.length > 0) {
+            setPassportAddress((current) => current || addresses[0] || "");
+          }
         }
       } catch (error) {
         if (active) {
@@ -40,7 +82,7 @@ export function TimelineWorkbench({ defaultAgent }: { defaultAgent: string }) {
       active = false;
       clearInterval(interval);
     };
-  }, [agent]);
+  }, []);
 
   const grouped = useMemo(() => {
     const map = new Map<string, TimelineEvent[]>();
@@ -63,8 +105,12 @@ export function TimelineWorkbench({ defaultAgent }: { defaultAgent: string }) {
   };
 
   const loadPassport = async () => {
+    if (!passportAddress) {
+      setOutput("No agent address available for passport lookup.");
+      return;
+    }
     try {
-      const data = await getPassport(agent);
+      const data = await getPassport(passportAddress);
       setOutput(JSON.stringify(data, null, 2));
     } catch (error) {
       setOutput(`Passport lookup failed: ${(error as Error).message}`);
@@ -75,12 +121,6 @@ export function TimelineWorkbench({ defaultAgent }: { defaultAgent: string }) {
     <div style={{ marginTop: 14 }}>
       <div className="panel">
         <h3 className="panel-title">Timeline Query</h3>
-        <div className="field-grid" style={{ marginTop: 10 }}>
-          <div className="field" style={{ gridColumn: "1 / -1" }}>
-            <label className="label">Agent Address</label>
-            <input className="input mono" value={agent} onChange={(event) => setAgent(event.target.value)} />
-          </div>
-        </div>
         <div style={{ marginTop: 10, fontSize: 12, color: "var(--text-2)" }}>{status}</div>
       </div>
 
@@ -88,7 +128,7 @@ export function TimelineWorkbench({ defaultAgent }: { defaultAgent: string }) {
         <div className="panel">
           <h3 className="panel-title">Actions</h3>
           <div className="timeline-list" style={{ marginTop: 10 }}>
-            {grouped.length === 0 && <div className="event-item">No events yet for this agent.</div>}
+            {grouped.length === 0 && <div className="event-item">No events yet.</div>}
             {grouped.map(([actionId, actionEvents]) => (
               <div key={actionId} className="event-item">
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>

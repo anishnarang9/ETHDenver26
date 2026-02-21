@@ -10,8 +10,8 @@ export function EnforcementPipeline({ steps }: { steps: EnforcementStep[] }) {
 
   return (
     <div className="timeline-list">
-      {steps.map((step) => (
-        <div key={`${step.step}-${step.name}`} className="event-item">
+      {steps.map((step, index) => (
+        <div key={`${step.step}-${step.name}-${index}`} className="event-item">
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
             <strong>
               {step.step}. {ENFORCEMENT_LABELS[step.name] || step.name}

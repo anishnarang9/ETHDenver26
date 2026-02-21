@@ -52,6 +52,25 @@ function mapTimelineToSteps(events: Array<{ eventType: string; detailsJson: Reco
 export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
   const { state, dispatch } = useSSEState();
   const [agentOrder, setAgentOrder] = useState<string[]>(["rider", "foodie", "eventbot"]);
+  const [agentLabels, setAgentLabels] = useState<Record<string, string>>({
+    rider: "Ride Researcher",
+    foodie: "Restaurant Scout",
+    eventbot: "Event Finder",
+    planner: "Itinerary Planner",
+  });
+
+  const formatRoleLabel = (value: string): string => {
+    return value
+      .replace(/[_-]+/g, " ")
+      .split(" ")
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  };
+
+  const isGenericAgentLabel = (value: string): boolean => {
+    return /^agent[-_][a-z0-9]+$/i.test(value) || /^[a-f0-9]{10,}$/i.test(value);
+  };
 
   useEffect(() => {
     const discovered = new Set<string>();
@@ -59,6 +78,9 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
       if (agent.id !== "planner") discovered.add(agent.id);
     }
     for (const agentId of Object.keys(state.browsers)) {
+      if (agentId !== "planner") discovered.add(agentId);
+    }
+    for (const agentId of Object.keys(state.thoughts)) {
       if (agentId !== "planner") discovered.add(agentId);
     }
     if (discovered.size === 0) return;
@@ -70,19 +92,89 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
       }
       return next;
     });
-  }, [state.spawnedAgents, state.browsers]);
+  }, [state.spawnedAgents, state.browsers, state.thoughts]);
+
+  useEffect(() => {
+    if (state.spawnedAgents.length === 0) return;
+    setAgentLabels((prev) => {
+      const next = { ...prev };
+      for (const agent of state.spawnedAgents) {
+        if (agent.id === "planner") continue;
+        const candidate = (agent.role || "").trim();
+        if (!candidate) continue;
+        if (isGenericAgentLabel(candidate)) continue;
+        next[agent.id] = formatRoleLabel(candidate);
+      }
+      return next;
+    });
+  }, [state.spawnedAgents]);
 
   const visibleAgents = useMemo(() => {
     const roleById = new Map<string, string>();
+    const statusById = new Map<string, string>();
     for (const agent of state.spawnedAgents) {
       roleById.set(agent.id, agent.role || agent.id);
+      statusById.set(agent.id, agent.status || "unknown");
     }
 
-    return agentOrder.map((id) => ({
-      id,
-      label: roleById.get(id) || id,
-    }));
-  }, [agentOrder, state.spawnedAgents]);
+    const candidates = agentOrder
+      .filter((id) => id !== "planner")
+      .map((id) => {
+        const browser = state.browsers[id];
+        const thought = state.thoughts[id] || "";
+        const hasVideo = Boolean(browser?.liveViewUrl && browser?.status === "active");
+        const hasOutput = Boolean(thought.trim());
+        const isStreaming = hasVideo || hasOutput;
+        const status = statusById.get(id) || state.agentStatuses[id] || "unknown";
+        const isActive = status === "active" || browser?.status === "active";
+        const baseLabel = agentLabels[id] || roleById.get(id) || formatRoleLabel(id);
+        const label = isGenericAgentLabel(baseLabel) ? "Specialist Agent" : baseLabel;
+        return {
+          id,
+          label,
+          hasVideo,
+          hasOutput,
+          isStreaming,
+          isActive,
+          status,
+        };
+      });
+
+    // If a role/label has any streaming agents, hide its non-streaming siblings.
+    const byLabel = new Map<string, typeof candidates>();
+    for (const candidate of candidates) {
+      const arr = byLabel.get(candidate.label) || [];
+      arr.push(candidate);
+      byLabel.set(candidate.label, arr);
+    }
+
+    const deduped = Array.from(byLabel.values()).flatMap((group) => {
+      const streaming = group.filter((item) => item.isStreaming);
+      if (streaming.length > 0) return streaming;
+      return group;
+    });
+
+    const sorted = [...deduped].sort((a, b) => {
+      const aRank = a.hasVideo ? 0 : a.hasOutput ? 1 : a.isActive ? 2 : 3;
+      const bRank = b.hasVideo ? 0 : b.hasOutput ? 1 : b.isActive ? 2 : 3;
+      if (aRank !== bRank) return aRank - bRank;
+      return a.id.localeCompare(b.id);
+    });
+
+    const streaming = sorted.filter((item) => item.isStreaming);
+
+    // Rules:
+    // 1) Always show all streaming agents.
+    // 2) If <= 6 streaming, fill to max 6 with non-streaming.
+    // 3) If > 6 streaming, show all streaming and no non-streaming.
+    if (streaming.length > 6) {
+      return streaming;
+    }
+
+    const nonStreaming = sorted.filter((item) => !item.isStreaming);
+    const fill = Math.max(0, 6 - streaming.length);
+    return [...streaming, ...nonStreaming.slice(0, fill)];
+  }, [agentOrder, state.spawnedAgents, state.browsers, state.thoughts, state.agentStatuses, agentLabels]);
 
   useEffect(() => {
     const agent = process.env.NEXT_PUBLIC_PLANNER_ADDRESS;

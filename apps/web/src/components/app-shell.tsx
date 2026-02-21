@@ -15,6 +15,7 @@ import {
   Zap,
 } from "lucide-react";
 import { isSetupComplete } from "../lib/setup-state";
+import { SSEProvider } from "../lib/sse-context";
 
 const navItems = [
   { href: "/console", label: "Dashboard", icon: LayoutGrid },
@@ -153,72 +154,74 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-shell-stack">
-      <div className="shell">
-        <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle light and dark mode">
-          {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-          <span>{theme === "dark" ? "Light" : "Dark"}</span>
-        </button>
-        <aside className="left-rail">
-          <div className="rail-brand">
-            <div className="rail-brand-lockup">
-              <Image src="/logo.png" alt="Actuate logo" width={28} height={28} />
-              <p className="rail-logo">Actuate</p>
-            </div>
-            <p className="rail-tag">Autonomous Agent Console</p>
-          </div>
-
-          <nav className="rail-nav" aria-label="Primary navigation">
-            {visibleNavItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.href;
-              return (
-                <Link key={item.href} href={item.href} className={`nav-link${isActive ? " active" : ""}`}>
-                  <Icon size={16} />
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
-          </nav>
-
-          <div className="rail-footer">
-            <span className="badge ok">Kite Testnet</span>
-            {!setupComplete && <span className="badge warn">Setup Locked</span>}
-          </div>
-        </aside>
-
-        <div className="main-frame">
-          <header className="utility-bar">
-            <div className="search-wrap">
-              <Search size={14} color="var(--text-1)" />
-              <input className="search-input" placeholder="Command search (runs, actions, tx hash)" />
-            </div>
-
-            <div className="utility-right">
-              <div className="chip mission-chip">
-                <Zap size={12} />
-                <span className="chip-label">Mission</span>
-                <span className="mono">Live</span>
+      <SSEProvider url={`${plannerUrl}/api/events`}>
+        <div className="shell">
+          <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle light and dark mode">
+            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+            <span>{theme === "dark" ? "Light" : "Dark"}</span>
+          </button>
+          <aside className="left-rail">
+            <div className="rail-brand">
+              <div className="rail-brand-lockup">
+                <Image src="/logo.png" alt="Actuate logo" width={28} height={28} />
+                <p className="rail-logo">Actuate</p>
               </div>
-              <StatusChip label="Planner" value={hostOf(plannerUrl)} />
-              <StatusChip label="Gateway" value={hostOf(gatewayUrl)} />
-              <StatusChip label="Chain" value={chain} />
-              <StatusChip
-                label="Wallet"
-                value={(process.env.NEXT_PUBLIC_PLANNER_ADDRESS || "not-set").slice(0, 10)}
-                ok={Boolean(process.env.NEXT_PUBLIC_PLANNER_ADDRESS)}
-              />
+              <p className="rail-tag">Autonomous Agent Console</p>
             </div>
-          </header>
 
-          {!setupComplete && !isSetupRoute && (
-            <div className="notice">
-              Setup is required before operations. Complete the guided flow to unlock Operations, Enforcement, and Agent controls.
+            <nav className="rail-nav" aria-label="Primary navigation">
+              {visibleNavItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.href;
+                return (
+                  <Link key={item.href} href={item.href} className={`nav-link${isActive ? " active" : ""}`}>
+                    <Icon size={16} />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
+
+            <div className="rail-footer">
+              <span className="badge ok">Kite Testnet</span>
+              {!setupComplete && <span className="badge warn">Setup Locked</span>}
             </div>
-          )}
+          </aside>
 
-          <main className="canvas-card">{children}</main>
+          <div className="main-frame">
+            <header className="utility-bar">
+              <div className="search-wrap">
+                <Search size={14} color="var(--text-1)" />
+                <input className="search-input" placeholder="Command search (runs, actions, tx hash)" />
+              </div>
+
+              <div className="utility-right">
+                <div className="chip mission-chip">
+                  <Zap size={12} />
+                  <span className="chip-label">Mission</span>
+                  <span className="mono">Live</span>
+                </div>
+                <StatusChip label="Planner" value={hostOf(plannerUrl)} />
+                <StatusChip label="Gateway" value={hostOf(gatewayUrl)} />
+                <StatusChip label="Chain" value={chain} />
+                <StatusChip
+                  label="Wallet"
+                  value={(process.env.NEXT_PUBLIC_PLANNER_ADDRESS || "not-set").slice(0, 10)}
+                  ok={Boolean(process.env.NEXT_PUBLIC_PLANNER_ADDRESS)}
+                />
+              </div>
+            </header>
+
+            {!setupComplete && !isSetupRoute && (
+              <div className="notice">
+                Setup is required before operations. Complete the guided flow to unlock Operations, Enforcement, and Agent controls.
+              </div>
+            )}
+
+            <main className="canvas-card">{children}</main>
+          </div>
         </div>
-      </div>
+      </SSEProvider>
       <SiteFooter />
     </div>
   );
