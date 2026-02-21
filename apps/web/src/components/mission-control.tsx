@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSSEState } from "../lib/sse-context";
 import { TransactionFeed } from "./transaction-feed";
 import { revokePassportOnchain } from "../lib/onchain";
 import {
@@ -39,6 +40,30 @@ export interface MissionControlProps {
   incomingEmail?: { from: string; subject: string; body: string };
 }
 
+const DEMO_SUBJECT = `ETHDenver Trip Planning — 6 Students from UMD (Feb 18–21)`;
+const DEMO_BODY = `Hi TripDesk! We're a group of 6 college students from the University of Maryland heading to ETHDenver 2025 and need help planning the full trip.
+
+## Travel Details
+- **Group size:** 6 students (all early 20s, no mobility needs)
+- **Outbound flight:** Wednesday Feb 18, arriving Denver International Airport (DEN) at ~11:00 AM local time
+- **Return flight:** Saturday Feb 21, 4:30 PM from DEN. We need to leave the ETHDenver venue at 4850 Western Dr by ~2:00 PM to make our flight.
+- **Accommodation:** Airbnb already booked at 2592 Meadowbrook Dr, Denver CO
+
+## What We Need
+1. **Airport ride (arrival):** Cheapest/fastest option from DEN → 2592 Meadowbrook Dr on Wednesday ~11 AM. We're 6 people so may need XL or two separate rides — compare Uber, Lyft, and shuttle options.
+2. **Airport ride (departure):** Ride from the ETHDenver venue at 4850 Western Dr → DEN on Saturday Feb 21, leaving by ~2:00 PM to catch our 4:30 PM flight.
+3. **Daily conference transport:** We're attending the main ETHDenver conference at 4850 Western Dr all week. Need transport from our Airbnb to the venue and back each day.
+4. **Side events:** Find AI and blockchain side events during ETHDenver week (Feb 18–21). We especially want AI agent talks, hackathon workshops, and crypto/DeFi meetups. Check lu.ma, Eventbrite, and the ETHDenver side event schedule.
+5. **Restaurants:** Budget-friendly Chinese and Mexican spots near the venue or our Airbnb. College student budget — $10–15 per person max. We'll eat out every dinner.
+6. **Local transport:** For daily Denver travel, prioritize shortest travel time. Compare RTD light rail, bus, and rideshare.
+
+## Budget & Priorities
+- **Budget:** Tight — minimize costs wherever possible
+- **Pace:** Relaxed. Conference during the day, food and chill at night.
+- **Priority order:** ETHDenver main event → AI/crypto side events → good cheap food → exploring Denver
+
+Please build us a day-by-day itinerary from Wed Feb 18 through Sat Feb 21 with transport options, restaurant picks, and event recommendations.`;
+
 export function MissionControl({
   transactions,
   plannerUrl,
@@ -46,6 +71,7 @@ export function MissionControl({
   eventbotAddress,
   incomingEmail,
 }: MissionControlProps) {
+  const { dispatch } = useSSEState();
   const [actionStatus, setActionStatus] = useState<string>("");
   const [plannerEmail, setPlannerEmail] = useState<string>("tripdesk-planner@agentmail.to");
   const [showDemoButtons, setShowDemoButtons] = useState(false);
@@ -69,13 +95,19 @@ export function MissionControl({
   };
 
   const sendDemoEmail = async () => {
+    dispatch({ type: "RESET" });
     setSending(true);
     setActionStatus("Sending email to orchestrator...");
     try {
       const res = await fetch(`${plannerUrl}/api/trigger`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from: "vagarwa4@terpmail.umd.edu" }),
+        body: JSON.stringify({
+          action: "plan-trip",
+          from: "vagarwa4@terpmail.umd.edu",
+          subject: DEMO_SUBJECT,
+          body: DEMO_BODY,
+        }),
       });
       const data = await res.json() as { runId?: string };
       setActionStatus(`Email sent → run ${data.runId?.slice(0, 8)}`);
