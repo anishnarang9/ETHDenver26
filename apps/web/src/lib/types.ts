@@ -70,6 +70,7 @@ export interface EmailEdge {
   toAgentId: string;
   subject?: string;
   timestamp: number;
+  threadId?: string;
 }
 
 export interface TimelineEvent {

@@ -1,10 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
-import { isSetupComplete } from "../lib/setup-state";
+import { ArrowRight } from "lucide-react";
 
 const pulse = {
   initial: { opacity: 0.35, scale: 0.92 },
@@ -16,12 +15,6 @@ const pulse = {
 };
 
 export default function HomePage() {
-  const [complete, setComplete] = useState(false);
-
-  useEffect(() => {
-    setComplete(isSetupComplete());
-  }, []);
-
   return (
     <div className="landing-fullbleed">
       <div className="landing-noise" />
@@ -36,9 +29,10 @@ export default function HomePage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <p className="landing-kicker">
-          <Sparkles size={14} /> Autonomous Agent Commerce
-        </p>
+        <div className="landing-brand-lockup">
+          <Image src="/logo.png" alt="Actuate logo" width={44} height={44} />
+          <span>Actuate</span>
+        </div>
 
         <h1 className="landing-headline">
           Control paid AI agents
@@ -47,7 +41,7 @@ export default function HomePage() {
         </h1>
 
         <p className="landing-subcopy">
-          TripDesk gives you a mission-grade surface for orchestrating agent actions, verifying x402 payments,
+          A mission-grade surface for orchestrating agent actions, verifying x402 payments,
           and tracking on-chain receipts in real time.
         </p>
 
@@ -55,14 +49,7 @@ export default function HomePage() {
           <Link href="/setup" className="landing-try-button">
             Try It <ArrowRight size={16} />
           </Link>
-          {complete && (
-            <Link href="/console" className="landing-dashboard-link">
-              Go to Dashboard
-            </Link>
-          )}
         </div>
-
-        <p className="landing-footnote">Flow: Landing to Setup to Dashboard</p>
       </motion.div>
 
       <motion.div

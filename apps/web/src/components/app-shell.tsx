@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -29,6 +30,22 @@ function StatusChip({ label, value, ok = true }: { label: string; value: string;
       <span className="chip-label">{label}</span>
       <span className="mono">{value}</span>
     </div>
+  );
+}
+
+function SiteFooter() {
+  const year = new Date().getFullYear();
+  return (
+    <footer className="app-footer">
+      <div className="app-footer-inner">
+        <div className="app-footer-brand">
+          <Image src="/logo.png" alt="Actuate logo" width={18} height={18} />
+          <span>Actuate</span>
+        </div>
+        <p className="app-footer-copy">Autonomous Agent Commerce Infrastructure</p>
+        <span className="app-footer-meta">© {year} Actuate</span>
+      </div>
+    </footer>
   );
 }
 
@@ -65,7 +82,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       return;
     }
     try {
-      const stored = window.localStorage.getItem("tripdesk_theme_v1");
+      const stored =
+        window.localStorage.getItem("actuate_theme_v1") || window.localStorage.getItem("tripdesk_theme_v1");
       const nextTheme =
         stored === "light" || stored === "dark"
           ? stored
@@ -84,7 +102,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setTheme(next);
     document.documentElement.setAttribute("data-theme", next);
     try {
-      window.localStorage.setItem("tripdesk_theme_v1", next);
+      window.localStorage.setItem("actuate_theme_v1", next);
+      window.localStorage.removeItem("tripdesk_theme_v1");
     } catch {
       // ignore
     }
@@ -108,12 +127,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (isFunnelRoute) {
     return (
-      <div className={isLandingRoute ? "landing-page-shell" : "setup-page-shell"}>
-        <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle light and dark mode">
-          {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-          <span>{theme === "dark" ? "Light" : "Dark"}</span>
-        </button>
-        {children}
+      <div className="app-shell-stack">
+        <div className={isLandingRoute ? "landing-page-shell" : "setup-page-shell"}>
+          <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle light and dark mode">
+            {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+            <span>{theme === "dark" ? "Light" : "Dark"}</span>
+          </button>
+          {children}
+        </div>
+        <SiteFooter />
       </div>
     );
   }
@@ -123,75 +145,81 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="shell-loading">
         <div className="chip">
           <span className="chip-dot" />
-          <span className="chip-label">Booting Control Surface</span>
+          <span className="chip-label">Booting Actuate Console</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="shell">
-      <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle light and dark mode">
-        {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
-        <span>{theme === "dark" ? "Light" : "Dark"}</span>
-      </button>
-      <aside className="left-rail">
-        <div className="rail-brand">
-          <p className="rail-logo">TripDesk</p>
-          <p className="rail-tag">Mission Control Noir</p>
-        </div>
-
-        <nav className="rail-nav" aria-label="Primary navigation">
-          {visibleNavItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href;
-            return (
-              <Link key={item.href} href={item.href} className={`nav-link${isActive ? " active" : ""}`}>
-                <Icon size={16} />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="rail-footer">
-          <span className="badge ok">Kite Testnet</span>
-          {!setupComplete && <span className="badge warn">Setup Locked</span>}
-        </div>
-      </aside>
-
-      <div className="main-frame">
-        <header className="utility-bar">
-          <div className="search-wrap">
-            <Search size={14} color="var(--text-1)" />
-            <input className="search-input" placeholder="Command search (runs, actions, tx hash)" />
-          </div>
-
-          <div className="utility-right">
-            <div className="chip mission-chip">
-              <Zap size={12} />
-              <span className="chip-label">Mission</span>
-              <span className="mono">Live</span>
+    <div className="app-shell-stack">
+      <div className="shell">
+        <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle light and dark mode">
+          {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+          <span>{theme === "dark" ? "Light" : "Dark"}</span>
+        </button>
+        <aside className="left-rail">
+          <div className="rail-brand">
+            <div className="rail-brand-lockup">
+              <Image src="/logo.png" alt="Actuate logo" width={28} height={28} />
+              <p className="rail-logo">Actuate</p>
             </div>
-            <StatusChip label="Planner" value={hostOf(plannerUrl)} />
-            <StatusChip label="Gateway" value={hostOf(gatewayUrl)} />
-            <StatusChip label="Chain" value={chain} />
-            <StatusChip
-              label="Wallet"
-              value={(process.env.NEXT_PUBLIC_PLANNER_ADDRESS || "not-set").slice(0, 10)}
-              ok={Boolean(process.env.NEXT_PUBLIC_PLANNER_ADDRESS)}
-            />
+            <p className="rail-tag">Autonomous Agent Console</p>
           </div>
-        </header>
 
-        {!setupComplete && !isSetupRoute && (
-          <div className="notice">
-            Setup is required before operations. Complete the guided flow to unlock Operations, Enforcement, and Agent controls.
+          <nav className="rail-nav" aria-label="Primary navigation">
+            {visibleNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname === item.href;
+              return (
+                <Link key={item.href} href={item.href} className={`nav-link${isActive ? " active" : ""}`}>
+                  <Icon size={16} />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
+
+          <div className="rail-footer">
+            <span className="badge ok">Kite Testnet</span>
+            {!setupComplete && <span className="badge warn">Setup Locked</span>}
           </div>
-        )}
+        </aside>
 
-        <main className="canvas-card">{children}</main>
+        <div className="main-frame">
+          <header className="utility-bar">
+            <div className="search-wrap">
+              <Search size={14} color="var(--text-1)" />
+              <input className="search-input" placeholder="Command search (runs, actions, tx hash)" />
+            </div>
+
+            <div className="utility-right">
+              <div className="chip mission-chip">
+                <Zap size={12} />
+                <span className="chip-label">Mission</span>
+                <span className="mono">Live</span>
+              </div>
+              <StatusChip label="Planner" value={hostOf(plannerUrl)} />
+              <StatusChip label="Gateway" value={hostOf(gatewayUrl)} />
+              <StatusChip label="Chain" value={chain} />
+              <StatusChip
+                label="Wallet"
+                value={(process.env.NEXT_PUBLIC_PLANNER_ADDRESS || "not-set").slice(0, 10)}
+                ok={Boolean(process.env.NEXT_PUBLIC_PLANNER_ADDRESS)}
+              />
+            </div>
+          </header>
+
+          {!setupComplete && !isSetupRoute && (
+            <div className="notice">
+              Setup is required before operations. Complete the guided flow to unlock Operations, Enforcement, and Agent controls.
+            </div>
+          )}
+
+          <main className="canvas-card">{children}</main>
+        </div>
       </div>
+      <SiteFooter />
     </div>
   );
 }

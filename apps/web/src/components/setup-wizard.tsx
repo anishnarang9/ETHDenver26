@@ -28,15 +28,10 @@ interface ServiceStatus {
   healthy: boolean | null;
 }
 
-const AGENT_WALLET_SOURCES = [
-  { name: "Planner", envKey: "NEXT_PUBLIC_PLANNER_ADDRESS", color: "#5e8bff" },
-  { name: "Rider", envKey: "NEXT_PUBLIC_RIDER_ADDRESS", color: "#33d1ff" },
-  { name: "Foodie", envKey: "NEXT_PUBLIC_FOODIE_ADDRESS", color: "#ffb020" },
-  { name: "EventBot", envKey: "NEXT_PUBLIC_EVENTBOT_ADDRESS", color: "#ff5d6c" },
-] as const;
+const AGENT_WALLET_SOURCES = [{ name: "Planner", envKey: "NEXT_PUBLIC_PLANNER_ADDRESS", color: "#5e8bff" }] as const;
 
-const SCOPE_PRESET = ["travel", "transport", "food", "events", "search", "booking"];
-const SERVICE_PRESET = ["gateway", "planner", "rider", "foodie", "eventbot"];
+const SCOPE_PRESET = ["travel", "booking", "search"];
+const SERVICE_PRESET = ["gateway", "planner"];
 
 const STEP_META = [
   { title: "Connect Owner Wallet", copy: "Authorize in-browser signing for on-chain passport and session writes." },
@@ -50,9 +45,6 @@ const STEP_META = [
 function readAddress(envKey: string): string {
   const map: Record<string, string | undefined> = {
     NEXT_PUBLIC_PLANNER_ADDRESS: process.env.NEXT_PUBLIC_PLANNER_ADDRESS,
-    NEXT_PUBLIC_RIDER_ADDRESS: process.env.NEXT_PUBLIC_RIDER_ADDRESS,
-    NEXT_PUBLIC_FOODIE_ADDRESS: process.env.NEXT_PUBLIC_FOODIE_ADDRESS,
-    NEXT_PUBLIC_EVENTBOT_ADDRESS: process.env.NEXT_PUBLIC_EVENTBOT_ADDRESS,
   };
   return map[envKey] || "";
 }
@@ -79,6 +71,7 @@ export function SetupWizard() {
     },
   ]);
   const [currentStep, setCurrentStep] = useState(0);
+  const [readinessAutoTriggered, setReadinessAutoTriggered] = useState(false);
 
   const operationalComplete = useMemo(() => steps.slice(0, 5).every((step) => step.completed), [steps]);
   const progressPct = useMemo(() => ((Math.min(currentStep, 5) + 1) / STEP_META.length) * 100, [currentStep]);
@@ -94,13 +87,21 @@ export function SetupWizard() {
     try {
       const runtime = globalThis as unknown as {
         ethereum?: Eip1193Provider;
-        window?: { ethereum?: Eip1193Provider };
+        window?: {
+          ethereum?: Eip1193Provider & {
+            providers?: Array<Eip1193Provider & { isMetaMask?: boolean }>;
+            isMetaMask?: boolean;
+          };
+        };
       };
       const ethereum = runtime.window?.ethereum ?? runtime.ethereum;
       if (!ethereum) {
         throw new Error("No EVM wallet found. Install or unlock MetaMask.");
       }
-      const provider = new BrowserProvider(ethereum);
+      const preferredProvider =
+        (runtime.window?.ethereum as (Eip1193Provider & { providers?: Array<Eip1193Provider & { isMetaMask?: boolean }> }) | undefined)
+          ?.providers?.find((provider) => provider.isMetaMask) || ethereum;
+      const provider = new BrowserProvider(preferredProvider);
       const signer = await provider.getSigner();
       const address = await signer.getAddress();
       setOwnerAddress(address);
@@ -121,12 +122,24 @@ export function SetupWizard() {
       const balance = await getTokenBalance(address).catch(() => "0.0000");
       next.push({ name: source.name, address, color: source.color, balance });
     }
+
+    // Fallback: if no env-backed agent wallets are configured, use the connected owner wallet.
+    if (next.length === 0 && ownerAddress) {
+      const balance = await getTokenBalance(ownerAddress).catch(() => "0.0000");
+      next.push({
+        name: "Connected Wallet",
+        address: ownerAddress,
+        color: "#5e8bff",
+        balance,
+      });
+    }
+
     setWallets(next);
 
     if (next.length > 0 && next.every((wallet) => Number(wallet.balance) > 0)) {
       patchStep(1, { completed: true, loading: false, error: null });
     }
-  }, []);
+  }, [ownerAddress]);
 
   useEffect(() => {
     if (currentStep < 1 || steps[1]?.completed) {
@@ -140,6 +153,10 @@ export function SetupWizard() {
   }, [currentStep, fetchBalances, steps]);
 
   const deployPassports = async () => {
+    if (!ownerAddress) {
+      patchStep(2, { error: "Connect owner wallet first." });
+      return;
+    }
     patchStep(2, { loading: true, error: null });
     let hasError = false;
     const seen = new Set<string>();
@@ -155,9 +172,9 @@ export function SetupWizard() {
       try {
         const tx = await upsertPassportOnchain({
           agentAddress: wallet.address,
-          expiresAt: Math.floor(Date.now() / 1000) + 86400,
-          perCallCap: "2000000000000000000",
-          dailyCap: "20000000000000000000",
+          expiresAt: Math.floor(Date.now() / 1000) + 86400 * 30,
+          perCallCap: "1000000000000000000",
+          dailyCap: "10000000000000000000",
           rateLimitPerMin: 30,
           scopes: SCOPE_PRESET,
           services: SERVICE_PRESET,
@@ -181,6 +198,10 @@ export function SetupWizard() {
   };
 
   const grantSessions = async () => {
+    if (!ownerAddress) {
+      patchStep(3, { error: "Connect owner wallet first." });
+      return;
+    }
     patchStep(3, { loading: true, error: null });
     let hasError = false;
     const seen = new Set<string>();
@@ -196,7 +217,7 @@ export function SetupWizard() {
         const tx = await grantSessionOnchain({
           agentAddress: wallet.address,
           sessionAddress: wallet.address,
-          expiresAt: Math.floor(Date.now() / 1000) + 86400,
+          expiresAt: Math.floor(Date.now() / 1000) + 86400 * 30,
           scopes: SCOPE_PRESET,
         });
         setSessionStatus((prev) => ({ ...prev, [wallet.name]: tx.txHash.slice(0, 12) }));
@@ -220,7 +241,7 @@ export function SetupWizard() {
   const checkReadiness = async () => {
     patchStep(4, { loading: true, error: null });
     const next: ServiceStatus[] = [];
-    let healthy = true;
+    let plannerHealthy = false;
 
     for (const service of services) {
       try {
@@ -230,26 +251,42 @@ export function SetupWizard() {
           signal: AbortSignal.timeout(15000),
         });
         next.push({ ...service, healthy: response.ok });
-        if (!response.ok) {
-          healthy = false;
+        if (service.name.toLowerCase() === "planner") {
+          plannerHealthy = response.ok;
         }
       } catch {
-        healthy = false;
         next.push({ ...service, healthy: false });
+        if (service.name.toLowerCase() === "planner") {
+          plannerHealthy = false;
+        }
       }
     }
 
     setServices(next);
     patchStep(4, {
       loading: false,
-      completed: healthy,
-      error: healthy ? null : "At least one service failed health check.",
+      completed: plannerHealthy,
+      error: plannerHealthy ? null : "Planner health check failed.",
     });
 
-    if (healthy) {
+    if (plannerHealthy) {
       setCurrentStep(5);
     }
   };
+
+  useEffect(() => {
+    if (currentStep !== 4 || readinessAutoTriggered || steps[4]?.loading || steps[4]?.completed) {
+      return;
+    }
+    setReadinessAutoTriggered(true);
+    void checkReadiness();
+  }, [currentStep, readinessAutoTriggered, steps]);
+
+  useEffect(() => {
+    if (currentStep !== 4) {
+      setReadinessAutoTriggered(false);
+    }
+  }, [currentStep]);
 
   const proceedToDashboard = () => {
     if (!operationalComplete) {
@@ -271,12 +308,6 @@ export function SetupWizard() {
     setSteps((prev) => prev.map((step, index) => (index <= 5 ? { ...step, completed: true, error: null } : step)));
     router.push("/console");
   };
-
-  useEffect(() => {
-    if (operationalComplete) {
-      setSetupComplete(true);
-    }
-  }, [operationalComplete]);
 
   const content = () => {
     switch (currentStep) {
@@ -324,7 +355,11 @@ export function SetupWizard() {
       case 2:
         return (
           <div className="setup-step-content">
-            <button className="landing-try-button" onClick={deployPassports} disabled={steps[2].loading || wallets.length === 0}>
+            <button
+              className="landing-try-button"
+              onClick={deployPassports}
+              disabled={steps[2].loading || wallets.length === 0 || !ownerAddress}
+            >
               {steps[2].loading ? <Loader2 size={16} className="spin" /> : <Zap size={16} />} Deploy Passports
             </button>
             <div className="feed-list" style={{ maxHeight: 220 }}>
@@ -342,7 +377,11 @@ export function SetupWizard() {
       case 3:
         return (
           <div className="setup-step-content">
-            <button className="landing-try-button" onClick={grantSessions} disabled={steps[3].loading || wallets.length === 0}>
+            <button
+              className="landing-try-button"
+              onClick={grantSessions}
+              disabled={steps[3].loading || wallets.length === 0 || !ownerAddress}
+            >
               {steps[3].loading ? <Loader2 size={16} className="spin" /> : <Zap size={16} />} Grant Sessions
             </button>
             <div className="feed-list" style={{ maxHeight: 220 }}>

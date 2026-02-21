@@ -17,8 +17,8 @@ export function WalletBalances({ wallets }: { wallets: WalletItem[] }) {
     <div className="panel">
       <h3 className="panel-title">Agent Wallets</h3>
       <div className="feed-list" style={{ marginTop: 10 }}>
-        {wallets.map((wallet) => (
-          <WalletRow key={wallet.address} wallet={wallet} />
+        {wallets.map((wallet, index) => (
+          <WalletRow key={`${wallet.name}-${wallet.address}-${index}`} wallet={wallet} />
         ))}
       </div>
     </div>

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { revokePassportOnchain } from "../lib/onchain";
 import { TransactionFeed } from "./transaction-feed";
+import { useSSEState } from "../lib/sse-context";
 import type { TransactionEvent } from "../lib/types";
 
 export function MissionControl({
@@ -13,6 +14,11 @@ export function MissionControl({
   plannerUrl: string;
 }) {
   const [status, setStatus] = useState<string>("Idle");
+  const { state } = useSSEState();
+  const isRunning =
+    !!state.orchestratorPhase &&
+    state.orchestratorPhase !== "completed" &&
+    state.orchestratorPhase !== "killed";
 
   const revokeAddress =
     process.env.NEXT_PUBLIC_PLANNER_ADDRESS ||
@@ -21,7 +27,7 @@ export function MissionControl({
 
   const controls = useMemo(
     () => [
-      { key: "plan-trip", label: "Plan Trip", className: "primary-button" },
+      { key: "plan-trip", label: "Run Demo", className: "primary-button" },
       { key: "additional-search", label: "Additional Search", className: "secondary-button" },
       { key: "scope-violation", label: "Scope Violation", className: "secondary-button" },
       { key: "post-revoke-test", label: "Post Revoke Test", className: "secondary-button" },
@@ -93,7 +99,7 @@ export function MissionControl({
         <button className="danger-button" onClick={revoke}>
           Revoke Passport
         </button>
-        <button className="danger-button" onClick={() => void kill()}>
+        <button className="danger-button" onClick={() => void kill()} disabled={!isRunning}>
           Kill Agents
         </button>
       </div>

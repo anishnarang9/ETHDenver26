@@ -9,8 +9,13 @@ const body = IBM_Plex_Sans({ subsets: ["latin"], variable: "--font-body", weight
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: "TripDesk Mission Control",
+  title: "Actuate",
   description: "Autonomous agent commerce console on Kite",
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

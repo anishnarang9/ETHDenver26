@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { AgentBrowserPanel } from "./agent-browser-panel";
@@ -51,21 +51,38 @@ function mapTimelineToSteps(events: Array<{ eventType: string; detailsJson: Reco
 
 export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
   const { state, dispatch } = useSSEState();
+  const [agentOrder, setAgentOrder] = useState<string[]>(["rider", "foodie", "eventbot"]);
+
+  useEffect(() => {
+    const discovered = new Set<string>();
+    for (const agent of state.spawnedAgents) {
+      if (agent.id !== "planner") discovered.add(agent.id);
+    }
+    for (const agentId of Object.keys(state.browsers)) {
+      if (agentId !== "planner") discovered.add(agentId);
+    }
+    if (discovered.size === 0) return;
+
+    setAgentOrder((prev) => {
+      const next = [...prev];
+      for (const id of discovered) {
+        if (!next.includes(id)) next.push(id);
+      }
+      return next;
+    });
+  }, [state.spawnedAgents, state.browsers]);
 
   const visibleAgents = useMemo(() => {
-    const dynamic = state.spawnedAgents.filter((agent) => agent.id !== "planner");
-    if (dynamic.length > 0) {
-      return dynamic.map((agent) => ({
-        id: agent.id,
-        label: agent.role || agent.id,
-      }));
+    const roleById = new Map<string, string>();
+    for (const agent of state.spawnedAgents) {
+      roleById.set(agent.id, agent.role || agent.id);
     }
-    return [
-      { id: "rider", label: "rider" },
-      { id: "foodie", label: "foodie" },
-      { id: "eventbot", label: "eventbot" },
-    ];
-  }, [state.spawnedAgents]);
+
+    return agentOrder.map((id) => ({
+      id,
+      label: roleById.get(id) || id,
+    }));
+  }, [agentOrder, state.spawnedAgents]);
 
   useEffect(() => {
     const agent = process.env.NEXT_PUBLIC_PLANNER_ADDRESS;

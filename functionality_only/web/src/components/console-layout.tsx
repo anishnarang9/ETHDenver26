@@ -1,0 +1,288 @@
+"use client";
+
+import { useState } from "react";
+import { useSSEState } from "../lib/sse-context";
+import { AgentNetworkGraph } from "./agent-network-graph";
+import { AgentDetailPanel } from "./agent-detail-panel";
+import { EnforcementPipeline } from "./enforcement-pipeline";
+import { MissionControl } from "./mission-control";
+import { WalletBalances } from "./wallet-balances";
+import { ReplayButton } from "./replay-button";
+import { AnimatePresence, motion } from "framer-motion";
+import { Mail, Shield, Command, Users, OctagonX, Network, ChevronDown } from "lucide-react";
+
+const plannerWallet = [
+  { name: "Planner (Orchestrator)", address: process.env.NEXT_PUBLIC_PLANNER_ADDRESS || "", color: "#3b82f6" },
+].filter((w) => w.address);
+
+const sectionHeaderStyle: React.CSSProperties = {
+  margin: "0 0 8px",
+  fontSize: "0.75rem",
+  fontWeight: 600,
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.05em",
+  display: "flex",
+  alignItems: "center",
+  gap: "6px",
+};
+
+export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
+  const { state, dispatch } = useSSEState();
+  const [killing, setKilling] = useState(false);
+  const [bottomExpanded, setBottomExpanded] = useState(false);
+
+  const agentCount = state.spawnedAgents.length;
+  const emailCount = state.emailEdges.length;
+
+  const isRunning =
+    !!state.orchestratorPhase &&
+    state.orchestratorPhase !== "completed" &&
+    state.orchestratorPhase !== "killed";
+
+  const handleKill = async () => {
+    setKilling(true);
+    try {
+      await fetch(plannerUrl + "/api/kill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      dispatch({ type: "RESET" });
+    } catch {
+      dispatch({ type: "RESET" });
+    } finally {
+      setKilling(false);
+    }
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#e2e8f0", fontFamily: "'Inter', sans-serif" }}>
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "12px 24px",
+          borderBottom: "1px solid #1e293b",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: "1.5rem",
+                fontWeight: 700,
+                background: "linear-gradient(135deg, #38bdf8, #818cf8)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+              }}
+            >
+              TripDesk
+            </h1>
+            <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>
+              Email-Chain Agent Network on Kite
+            </p>
+          </div>
+          {/* Stats pills */}
+          <div style={{ display: "flex", gap: 6 }}>
+            {agentCount > 0 && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "3px 10px",
+                  borderRadius: 20,
+                  background: "#1e293b",
+                  border: "1px solid #334155",
+                  fontSize: "0.7rem",
+                  fontWeight: 600,
+                  color: "#94a3b8",
+                }}
+              >
+                <Users size={11} style={{ color: "#8b5cf6" }} />
+                {agentCount}
+              </span>
+            )}
+            {emailCount > 0 && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "3px 10px",
+                  borderRadius: 20,
+                  background: "#1e293b",
+                  border: "1px solid #334155",
+                  fontSize: "0.7rem",
+                  fontWeight: 600,
+                  color: "#94a3b8",
+                }}
+              >
+                <Mail size={11} style={{ color: "#818cf8" }} />
+                {emailCount}
+              </span>
+            )}
+            {state.orchestratorPhase && state.orchestratorPhase !== "completed" && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "3px 10px",
+                  borderRadius: 20,
+                  background: "rgba(34, 197, 94, 0.1)",
+                  border: "1px solid rgba(34, 197, 94, 0.3)",
+                  fontSize: "0.7rem",
+                  fontWeight: 600,
+                  color: "#22c55e",
+                  animation: "node-pulse 2s ease-in-out infinite",
+                }}
+              >
+                {state.orchestratorPhase}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <AnimatePresence>
+            {isRunning && (
+              <motion.button
+                initial={{ opacity: 0, scale: 0.9, x: 10 }}
+                animate={{ opacity: 1, scale: 1, x: 0 }}
+                exit={{ opacity: 0, scale: 0.9, x: 10 }}
+                transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                onClick={handleKill}
+                disabled={killing}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "7px 14px",
+                  borderRadius: 8,
+                  border: "1px solid #ef444480",
+                  background: "linear-gradient(135deg, #dc2626, #b91c1c)",
+                  color: "#fff",
+                  fontWeight: 700,
+                  fontSize: "0.75rem",
+                  cursor: killing ? "not-allowed" : "pointer",
+                  fontFamily: "inherit",
+                  opacity: killing ? 0.6 : 1,
+                  boxShadow: "0 0 20px rgba(239,68,68,0.25), inset 0 1px 0 rgba(255,255,255,0.1)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                <OctagonX size={13} />
+                {killing ? "Killing..." : "Kill All"}
+              </motion.button>
+            )}
+          </AnimatePresence>
+          <ReplayButton plannerUrl={plannerUrl} />
+        </div>
+      </div>
+
+      {/* Agent Network Graph (~40% height) */}
+      <div style={{ padding: "12px 24px 0" }}>
+        <h2 style={sectionHeaderStyle}>
+          <Network size={14} style={{ color: "#818cf8" }} />
+          Agent Network
+          {state.thoughts.planner && (
+            <span style={{ fontWeight: 400, fontStyle: "italic", color: "#475569", fontSize: "0.68rem", marginLeft: 8 }}>
+              {state.thoughts.planner.slice(0, 80)}
+              {state.thoughts.planner.length > 80 && "..."}
+            </span>
+          )}
+        </h2>
+        <div style={{ height: "calc(40vh - 60px)", minHeight: 280 }}>
+          <AgentNetworkGraph />
+        </div>
+      </div>
+
+      {/* Agent Detail Panel (~45% height) */}
+      <div style={{ padding: "12px 24px 0" }}>
+        <AgentDetailPanel />
+      </div>
+
+      {/* Collapsible bottom section */}
+      <div style={{ padding: "12px 24px 24px" }}>
+        <button
+          onClick={() => setBottomExpanded(!bottomExpanded)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "8px 0",
+            background: "none",
+            border: "none",
+            color: "#64748b",
+            fontSize: "0.72rem",
+            fontWeight: 600,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            textTransform: "uppercase",
+            letterSpacing: "0.05em",
+          }}
+        >
+          <ChevronDown
+            size={14}
+            style={{
+              transform: bottomExpanded ? "rotate(180deg)" : "rotate(0deg)",
+              transition: "transform 0.2s",
+            }}
+          />
+          Enforcement | Wallet | Mission Control
+        </button>
+
+        <AnimatePresence>
+          {bottomExpanded && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+              style={{ overflow: "hidden" }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 12,
+                  paddingTop: 8,
+                }}
+              >
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div>
+                    <h2 style={sectionHeaderStyle}>
+                      <Shield size={14} style={{ color: "#f59e0b" }} />
+                      Enforcement Pipeline
+                    </h2>
+                    <EnforcementPipeline steps={state.enforcementSteps} />
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {plannerWallet.length > 0 && <WalletBalances wallets={plannerWallet} />}
+                  <div>
+                    <h2 style={sectionHeaderStyle}>
+                      <Command size={14} style={{ color: "#3b82f6" }} />
+                      Mission Control
+                    </h2>
+                    <MissionControl
+                      transactions={state.transactions}
+                      plannerUrl={plannerUrl}
+                      agentAddress={process.env.NEXT_PUBLIC_PLANNER_ADDRESS}
+                      plannerAddress={process.env.NEXT_PUBLIC_PLANNER_ADDRESS}
+                    />
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}

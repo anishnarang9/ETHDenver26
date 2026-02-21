@@ -152,6 +152,12 @@ button {
   gap: 14px;
 }
 
+.app-shell-stack {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: 1fr auto;
+}
+
 .landing-page-shell {
   position: relative;
   z-index: 1;
@@ -212,6 +218,12 @@ html[data-theme="light"] .theme-toggle {
   border: 1px solid var(--line-soft);
   border-radius: 12px;
   background: rgba(10, 15, 22, 0.72);
+}
+
+.rail-brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .rail-logo {
@@ -1116,6 +1128,20 @@ html[data-theme="light"] .dashboard-home-button {
   font-size: 12px;
 }
 
+.landing-brand-lockup {
+  margin: 0 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.landing-brand-lockup span {
+  font-family: var(--font-display), "Space Grotesk", sans-serif;
+  font-size: clamp(30px, 4.2vw, 56px);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
 .landing-headline {
   margin: 0;
   font-family: var(--font-display), "Space Grotesk", sans-serif;
@@ -1812,6 +1838,49 @@ html[data-theme="light"] .setup-funnel .secondary-button {
   min-height: 100vh;
   display: grid;
   place-items: center;
+}
+
+.app-footer {
+  position: relative;
+  z-index: 1;
+  padding: 10px 16px 16px;
+}
+
+.app-footer-inner {
+  max-width: 1520px;
+  margin: 0 auto;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: rgba(9, 14, 20, 0.68);
+  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.app-footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.app-footer-copy {
+  margin: 0;
+  color: var(--text-1);
+  font-size: 12px;
+}
+
+.app-footer-meta {
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+html[data-theme="light"] .app-footer-inner {
+  background: rgba(255, 255, 255, 0.82);
 }
 
 @media (prefers-reduced-motion: reduce) {
