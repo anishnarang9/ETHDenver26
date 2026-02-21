@@ -54,10 +54,20 @@ function startInboxPolling(inboxId: string, apiKey: string) {
           body = full.messages[0]?.body || body;
         } catch { /* fall back to preview */ }
 
+        // Extract Reply-To or [From: ...] if the email was sent via SMTP relay or AgentMail proxy
+        let realFrom = firstMsg.from;
+        const replyToMatch = body.match(/\[Reply-To:\s*([^\]\s]+)\]/);
+        const fromMatch = body.match(/\[From:\s*([^\]\s]+)\]/);
+        if (replyToMatch) realFrom = replyToMatch[1];
+        else if (fromMatch) realFrom = fromMatch[1];
+
+        // Strip the [Reply-To: ...] / [From: ...] prefix from the body
+        const cleanBody = body.replace(/^\[(?:Reply-To|From):\s*[^\]]+\]\s*\n*/i, "").trim();
+
         const humanEmail = {
-          from: firstMsg.from,
+          from: realFrom,
           subject: thread.subject || "Trip Request",
-          body,
+          body: cleanBody,
         };
 
         app.log.info("[poll] New email from %s: %s", humanEmail.from, humanEmail.subject);
@@ -239,11 +249,14 @@ app.post("/api/send-email", async (request) => {
         auth: { user: config.SMTP_USER, pass: config.SMTP_PASS },
       });
 
+      // Gmail overrides 'from' to match the authenticated account.
+      // Embed the user's claimed address in the body so the orchestrator knows who to reply to.
       await transporter.sendMail({
-        from: body.from,
+        from: config.SMTP_USER,
         to: plannerAddress,
         subject: body.subject,
-        text: body.body,
+        text: `[Reply-To: ${body.from}]\n\n${body.body}`,
+        replyTo: body.from,
       });
 
       app.log.info("[send-email] Sent via SMTP from %s to %s", body.from, plannerAddress);

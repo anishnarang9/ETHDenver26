@@ -271,7 +271,16 @@ export async function runEmailChainTripPlan(opts: {
             agentId: spawned.id,
             payload: { role, inboxAddress },
           });
+        } else {
+          console.error("[orchestrator] FAILED to allocate inbox for", role, "- agent will have NO email tools");
+          opts.sseHub.emit({
+            type: "error",
+            agentId: spawned.id,
+            payload: { message: `Inbox allocation failed for ${role} — email tools unavailable` },
+          });
         }
+      } else {
+        console.error("[orchestrator] No InboxPool — AGENTMAIL_API_KEY not set. Agents cannot email.");
       }
 
       const agentTools: AgentTool[] = [];
@@ -376,25 +385,29 @@ export async function runEmailChainTripPlan(opts: {
           "   - Travelers: 2 adults, midrange budget ($200-$300/night lodging)\n" +
           "   - Lodging: downtown/LoDo hotel, no rental car (transit + rideshare)\n" +
           "   - Interests: food + breweries, light hiking, 1-2 museums\n" +
-          "2. Call check_inbox to collect research from other agents.\n" +
-          "3. If no data yet, do another check_inbox after a moment. Repeat up to 4 times.\n" +
-          "4. Incorporate whatever research data you receive into the itinerary.\n" +
-          "5. Email the COMPLETE compiled itinerary to the orchestrator at: " + emailTo + "\n" +
-          "6. Call report_results as backup.\n\n" +
-          "CRITICAL: Do NOT email the human requester — you are a backend compiler, not a customer-facing agent.\n" +
-          "CRITICAL: Do NOT email research agents asking for info — they will send you data on their own.\n" +
+          "2. After creating the skeleton, call wait_then_check_inbox with seconds=20 to wait for research data.\n" +
+          "3. If no emails yet, call wait_then_check_inbox again with seconds=25. Repeat up to 5 times total.\n" +
+          "   Research agents need time to browse the web and compile findings — be patient.\n" +
+          "4. Each time you get new emails, incorporate their data into the itinerary.\n" +
+          "5. Once you have data from at least 2 research agents (or after 5 inbox checks),\n" +
+          "   compile the FINAL itinerary and send_email it to the orchestrator at: " + emailTo + "\n" +
+          "6. Also call report_results with the compiled itinerary as backup.\n\n" +
+          "CRITICAL: You MUST use wait_then_check_inbox (NOT check_inbox) so you actually wait for data.\n" +
+          "CRITICAL: Do NOT email the human requester — you are a backend compiler.\n" +
+          "CRITICAL: Do NOT email research agents — they will send you data on their own.\n" +
           "CRITICAL: Do NOT ask anyone for clarification. Always proceed with defaults if details are missing.\n" +
-          "If you receive emails from researchers, incorporate their data. Do NOT reply with questions.\n" +
-          "Focus on COMPILING, not coordinating. Use your iterations for inbox checks and compilation.\n"
+          "CRITICAL: You MUST call send_email to send your compiled itinerary to the orchestrator before finishing.\n"
         : "## Communication Protocol (Research Agent)\n" +
           "You have all the trip details in your task description — start researching IMMEDIATELY.\n" +
           "1. Do your research using your tools (browser, hire, etc.). This is your PRIMARY task.\n" +
           "2. Spend most of your iterations on research, not on emails.\n" +
-          "3. When you have findings, email them to each collaborator listed below.\n" +
-          "4. Email your findings to the orchestrator at: " + emailTo + "\n" +
-          "5. Call report_results as backup.\n\n" +
+          "3. CRITICAL: When you have findings, you MUST call send_email to EACH collaborator listed below.\n" +
+          "   This is MANDATORY — the trip compiler cannot build the itinerary without your data.\n" +
+          "4. ALSO send_email your findings to the orchestrator at: " + emailTo + "\n" +
+          "5. Call report_results as backup AFTER sending emails.\n\n" +
           "IMPORTANT: Do NOT email the itinerary-planner asking for trip details — you already have them.\n" +
-          "Do NOT wait for replies. Just research, send your findings, and finish.\n";
+          "IMPORTANT: Do NOT skip the send_email step. You MUST email your findings before calling report_results.\n" +
+          "Do NOT wait for replies. Just research, send your findings via email, and finish.\n";
 
       const fullSystemPrompt = systemPrompt + "\n\n" +
         "## Agent Email Directory\n" +
@@ -517,7 +530,7 @@ export async function runEmailChainTripPlan(opts: {
 
   const waitForAgentsTool: AgentTool = {
     name: "wait_for_agents",
-    description: "Wait up to 60 seconds for all running agents to complete.",
+    description: "Wait up to 120 seconds for all running agents to complete their research and email their findings.",
     parameters: { type: "object", properties: {}, required: [] },
     execute: async () => {
       const running = Array.from(runningAgents.values()).filter((a) => a.status === "running");
@@ -529,7 +542,7 @@ export async function runEmailChainTripPlan(opts: {
         payload: { decision: "waiting", waitingFor: running.map((a) => a.role) },
       });
 
-      const timeout = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 60000));
+      const timeout = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), 120_000));
       const allDone = Promise.allSettled(running.map((a) => a.promise)).then(() => "done" as const);
       await Promise.race([allDone, timeout]);
 

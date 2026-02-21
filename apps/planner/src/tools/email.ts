@@ -67,6 +67,39 @@ export function createAgentEmailTools(opts: {
       },
     },
     {
+      name: "wait_then_check_inbox",
+      description:
+        "Wait a specified number of seconds (10-30), then check inbox. " +
+        "Use this when you are waiting for other agents to send you research data. " +
+        "This is better than calling check_inbox repeatedly because it actually pauses.",
+      parameters: {
+        type: "object",
+        properties: {
+          seconds: { type: "number", description: "Seconds to wait before checking (10-30)" },
+        },
+        required: ["seconds"],
+      },
+      execute: async (args: Record<string, unknown>) => {
+        const secs = Math.min(30, Math.max(5, (args.seconds as number) || 15));
+        await new Promise((resolve) => setTimeout(resolve, secs * 1000));
+        const threads = await opts.mailClient.listThreads(opts.agentInboxAddress);
+        opts.sseHub.emit({
+          type: "agent_email_received",
+          agentId: opts.agentId,
+          payload: { threadCount: threads.length, inbox: opts.agentInboxAddress, waitedSeconds: secs },
+        });
+        return {
+          waitedSeconds: secs,
+          threads: threads.map((t) => ({
+            threadId: t.id,
+            subject: t.subject,
+            latestMessage: t.messages[t.messages.length - 1]?.body || "",
+            from: t.messages[0]?.from || "",
+          })),
+        };
+      },
+    },
+    {
       name: "reply_to_thread",
       description: "Reply to an existing email thread.",
       parameters: {
