@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, Maximize2, X, Monitor, AlertCircle, Mail, Loader2 } from "lucide-react";
 import type { SpawnedAgentInfo } from "../lib/sse-context";
@@ -130,7 +130,7 @@ function FullScreenOverlay({
 
 /* ─── Agent Card ─── */
 
-export function AgentCard({
+export const AgentCard = memo(function AgentCard({
   agent,
   browser,
   thought,
@@ -420,4 +420,4 @@ export function AgentCard({
       </motion.div>
     </>
   );
-}
+});

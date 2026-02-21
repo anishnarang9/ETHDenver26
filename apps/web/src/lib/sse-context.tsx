@@ -427,17 +427,45 @@ export function SSEProvider({ url, children }: { url: string; children: ReactNod
 
   const currentRunRef = React.useRef<string | undefined>(undefined);
 
+  // Throttle LLM_THINKING to max 1 dispatch per 800ms per agent to prevent render thrashing
+  const pendingThoughts = React.useRef<Record<string, string>>({});
+  const thoughtTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushThoughts = useCallback(() => {
+    const pending = pendingThoughts.current;
+    const keys = Object.keys(pending);
+    if (keys.length === 0) return;
+    for (const agentId of keys) {
+      dispatch({
+        type: "LLM_THINKING",
+        payload: { type: "llm_thinking", agentId, payload: { text: pending[agentId] } },
+      } as SSEAction);
+    }
+    pendingThoughts.current = {};
+  }, []);
+
   const handleMessage = useCallback((msg: SSEMessage) => {
     if (msg.runId && msg.runId !== currentRunRef.current) {
       currentRunRef.current = msg.runId;
       dispatch({ type: "RESET" });
     }
 
+    // Throttle thinking events — batch and flush every 800ms
+    if (msg.type === "llm_thinking") {
+      pendingThoughts.current[msg.agentId] = (msg.payload.text as string) || "";
+      if (!thoughtTimerRef.current) {
+        thoughtTimerRef.current = setTimeout(() => {
+          thoughtTimerRef.current = null;
+          flushThoughts();
+        }, 800);
+      }
+      return;
+    }
+
     const typeMap: Record<string, SSEAction["type"]> = {
       email_received: "EMAIL_RECEIVED",
       email_sent: "EMAIL_SENT",
       browser_session: "BROWSER_SESSION",
-      llm_thinking: "LLM_THINKING",
       enforcement_step: "ENFORCEMENT_STEP",
       payment_start: "PAYMENT_START",
       payment_complete: "PAYMENT_COMPLETE",
@@ -457,12 +485,14 @@ export function SSEProvider({ url, children }: { url: string; children: ReactNod
     if (actionType) {
       dispatch({ type: actionType, payload: msg } as SSEAction);
     }
-  }, []);
+  }, [flushThoughts]);
 
   const { switchUrl } = useSSE(url, handleMessage);
 
+  const ctxValue = React.useMemo(() => ({ state, dispatch, switchUrl }), [state, switchUrl]);
+
   return (
-    <SSEContext.Provider value={{ state, dispatch, switchUrl }}>
+    <SSEContext.Provider value={ctxValue}>
       {children}
     </SSEContext.Provider>
   );

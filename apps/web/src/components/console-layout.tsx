@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useSSEState } from "../lib/sse-context";
 import { AgentNetworkGraph } from "./agent-network-graph";
 import { AgentCard } from "./agent-card";
@@ -35,10 +35,16 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
   const agentCount = state.spawnedAgents.length;
   const emailCount = state.emailEdges.length;
 
-  const isRunning =
+  const isRunning = useMemo(() =>
     !!state.orchestratorPhase &&
     state.orchestratorPhase !== "completed" &&
-    state.orchestratorPhase !== "killed";
+    state.orchestratorPhase !== "killed",
+    [state.orchestratorPhase]
+  );
+
+  // Stabilize agent list reference — only change when agents actually change
+  const agents = useMemo(() => state.spawnedAgents, [state.spawnedAgents]);
+  const emails = useMemo(() => state.emails, [state.emails]);
 
   const handleKill = async () => {
     setKilling(true);
@@ -229,8 +235,8 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
                 paddingRight: 4,
               }}
             >
-              <AnimatePresence>
-                {state.spawnedAgents.map((agent) => (
+              <AnimatePresence initial={false}>
+                {agents.map((agent) => (
                   <AgentCard
                     key={agent.id}
                     agent={agent}
@@ -303,13 +309,13 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
         <h2 style={sectionHeaderStyle}>
           <Mail size={14} style={{ color: "#818cf8" }} />
           Agent Email Chain
-          {state.emails.length > 0 && (
+          {emails.length > 0 && (
             <span style={{
               fontWeight: 500, color: "#818cf8", fontSize: "0.62rem",
               marginLeft: 6, padding: "1px 6px", borderRadius: 10,
               background: "rgba(129,140,248,0.1)", border: "1px solid rgba(129,140,248,0.2)",
             }}>
-              {state.emails.length}
+              {emails.length}
             </span>
           )}
         </h2>
@@ -318,8 +324,8 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
           border: "1px solid #1e293b", overflow: "hidden",
           minHeight: 60,
         }}>
-          {state.emails.length > 0 ? (
-            <EmailChainView emails={state.emails} />
+          {emails.length > 0 ? (
+            <EmailChainView emails={emails} />
           ) : (
             <div style={{
               padding: "24px 20px",
