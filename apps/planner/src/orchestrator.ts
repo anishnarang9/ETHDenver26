@@ -584,9 +584,13 @@ export async function runEmailChainTripPlan(opts: {
     "  then email the orchestrator with the complete compiled itinerary when done.'\n" +
     "  IMPORTANT: Do NOT give itinerary-planner any collaborateWith — it only RECEIVES emails.\n" +
     "  IMPORTANT: Do NOT include the human's email address in the itinerary-planner's task.\n" +
+    "  scopes: [] (no specialist tools needed)\n" +
     "- \"ride-researcher\": Searches for rides/transport (needs browser)\n" +
+    "  scopes: [\"transport\"] — REQUIRED or hire_rider will return 403\n" +
     "- \"restaurant-scout\": Finds restaurants (needs browser)\n" +
+    "  scopes: [\"food\"] — REQUIRED or hire_foodie will return 403\n" +
     "- \"event-finder\": Discovers and registers for events on luma (needs browser)\n" +
+    "  scopes: [\"events\"] — REQUIRED or hire_eventbot will return 403\n" +
     "  IMPORTANT: In the event-finder's systemPrompt, include these instructions:\n" +
     "  'The ETHDenver side-events calendar is at https://luma.com/ethdenver. Navigate there first.\n" +
     "   Luma is a React SPA — after navigating, use extract_text to read the content.\n" +

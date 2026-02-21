@@ -54,12 +54,12 @@ export async function handleFindRestaurants(opts: {
     tools.push(
       {
         name: "navigate",
-        description: "Navigate to a URL in the browser",
+        description: "Navigate to a URL in the browser. Prefer direct Yelp search URLs over Google/Bing.",
         parameters: { type: "object", properties: { url: { type: "string" } }, required: ["url"] },
         execute: async (args: Record<string, unknown>) => {
           const result = await executeBrowserCode({
             apiKey, sessionId: sid,
-            code: `await page.goto('${args.url}', { waitUntil: 'networkidle', timeout: 15000 }); var _title = await page.title(); _title;`,
+            code: `await page.goto('${args.url}', { waitUntil: 'domcontentloaded', timeout: 20000 }); await page.waitForTimeout(2000); var _title = await page.title(); _title;`,
           });
           return { title: result.output };
         },
@@ -71,7 +71,7 @@ export async function handleFindRestaurants(opts: {
         execute: async (args: Record<string, unknown>) => {
           const result = await executeBrowserCode({
             apiKey, sessionId: sid,
-            code: `await page.keyboard.type('${args.text}'); await page.keyboard.press('Enter'); await page.waitForTimeout(3000); var _text = await page.evaluate(() => document.body.innerText.substring(0, 2000)); _text;`,
+            code: `await page.keyboard.type('${args.text}'); await page.keyboard.press('Enter'); await page.waitForTimeout(4000); var _text = await page.evaluate(() => (document.body.innerText || document.body.textContent || '').substring(0, 3000)); _text;`,
           });
           return { pageText: result.output };
         },
@@ -94,10 +94,10 @@ export async function handleFindRestaurants(opts: {
         description: "Extract visible text from the current page",
         parameters: { type: "object", properties: { maxLength: { type: "number" } } },
         execute: async (args: Record<string, unknown>) => {
-          const maxLen = (args.maxLength as number) || 3000;
+          const maxLen = (args.maxLength as number) || 4000;
           const result = await executeBrowserCode({
             apiKey, sessionId: sid,
-            code: `var _text = await page.evaluate(() => document.body.innerText); _text.substring(0, ${maxLen});`,
+            code: `await page.waitForTimeout(2000); var _text = await page.evaluate(() => { var t = document.body.innerText || document.body.textContent || ''; return t.replace(/\\s+/g, ' ').trim().substring(0, ${maxLen}); }); _text;`,
           });
           return { text: result.output };
         },
@@ -110,7 +110,11 @@ export async function handleFindRestaurants(opts: {
   const result = await runAgentLoop({
     model: "gpt-5.2",
     systemPrompt: `You are a restaurant research agent. Given a location and preferences, find the best dining options.
-If you have browser tools, search Yelp and Google Maps for restaurants.${weatherContext}
+If you have browser tools, use Yelp directly — navigate to URLs like:
+  https://www.yelp.com/search?find_desc=chinese+restaurants&find_loc=Denver+CO
+  https://www.yelp.com/search?find_desc=mexican+restaurants&find_loc=Denver+CO
+Do NOT use Google or Bing — their pages do not render properly in this browser. Yelp works reliably.
+After navigating, call extract_text to read the restaurant listings.${weatherContext}
 Consider ratings, distance, price range, cuisine type, and hours of operation.
 Always return a JSON object with a "restaurants" array containing objects with: name, cuisine, rating, priceRange, distance, address, notes.`,
     userMessage: `Find restaurants near "${opts.location}" for ${opts.date}.${opts.cuisine ? ` Preferred cuisine: ${opts.cuisine}` : ""}${opts.partySize ? ` Party size: ${opts.partySize}` : ""}`,
