@@ -299,6 +299,7 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
               plannerUrl={plannerUrl}
               agentAddress={process.env.NEXT_PUBLIC_PLANNER_ADDRESS}
               plannerAddress={process.env.NEXT_PUBLIC_PLANNER_ADDRESS}
+              incomingEmail={state.incomingEmail}
             />
           </div>
         </div>
