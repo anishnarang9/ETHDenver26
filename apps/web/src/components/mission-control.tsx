@@ -13,6 +13,7 @@ import {
   Copy,
   Check,
   Inbox,
+  Send,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -49,6 +50,7 @@ export function MissionControl({
   const [plannerEmail, setPlannerEmail] = useState<string>("tripdesk-planner@agentmail.to");
   const [showDemoButtons, setShowDemoButtons] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -64,6 +66,24 @@ export function MissionControl({
     navigator.clipboard.writeText(plannerEmail).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const sendDemoEmail = async () => {
+    setSending(true);
+    setActionStatus("Sending email to orchestrator...");
+    try {
+      const res = await fetch(`${plannerUrl}/api/trigger`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from: "vagarwa4@terpmail.umd.edu" }),
+      });
+      const data = await res.json() as { runId?: string };
+      setActionStatus(`Email sent → run ${data.runId?.slice(0, 8)}`);
+    } catch (err) {
+      setActionStatus(`Error: ${(err as Error).message}`);
+    } finally {
+      setSending(false);
+    }
   };
 
   const triggerAction = async (action: string) => {
@@ -183,6 +203,41 @@ export function MissionControl({
             {copied ? <Check size={10} /> : <Copy size={10} />}
             {copied ? "Copied" : "Copy"}
           </motion.button>
+        </div>
+
+        {/* Send demo email button */}
+        <div style={{ borderTop: "1px solid #1e293b", padding: "8px 10px" }}>
+          <motion.button
+            onClick={sendDemoEmail}
+            disabled={sending}
+            whileTap={{ scale: 0.96 }}
+            style={{
+              width: "100%",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+              padding: "7px 10px",
+              borderRadius: 8,
+              border: "1px solid rgba(129,140,248,0.35)",
+              background: sending
+                ? "rgba(129,140,248,0.05)"
+                : "linear-gradient(135deg, rgba(56,189,248,0.12), rgba(129,140,248,0.12))",
+              color: sending ? "#475569" : "#818cf8",
+              fontWeight: 600,
+              fontSize: "0.7rem",
+              cursor: sending ? "not-allowed" : "pointer",
+              fontFamily: "inherit",
+              letterSpacing: "0.03em",
+              transition: "background 0.2s, color 0.2s",
+            }}
+          >
+            <Send size={11} style={{ flexShrink: 0 }} />
+            {sending ? "Sending..." : "Send Demo Email → Orchestrator"}
+          </motion.button>
+          <div style={{ marginTop: 4, fontSize: "0.6rem", color: "#334155", textAlign: "center" }}>
+            from: vagarwa4@terpmail.umd.edu
+          </div>
         </div>
 
         {/* Listening indicator / received email */}
