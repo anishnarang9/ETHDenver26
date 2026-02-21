@@ -108,8 +108,8 @@ export function createAgentMailClient(apiKey: string): AgentMailClient {
         headers,
         body: JSON.stringify({
           url: opts.url,
-          eventTypes: opts.events,
-          inboxIds: [opts.inboxId],
+          event_types: opts.events,
+          inbox_ids: [opts.inboxId],
         }),
       });
       if (!res.ok) {
