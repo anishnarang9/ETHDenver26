@@ -1,9 +1,9 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
-import { SSEHub, type RunEventWriter } from "@kite-stack/agent-core";
+import { SSEHub, type SpawnedAgent, type RunEventWriter } from "@kite-stack/agent-core";
 import { prisma } from "@kite-stack/db";
 import { loadConfig } from "./config.js";
-import { runTripPlan } from "./orchestrator.js";
+import { runDynamicTripPlan } from "./orchestrator.js";
 
 const config = loadConfig();
 
@@ -18,19 +18,29 @@ export function setMailAddresses(addresses: MailBootstrapResult) {
 
 const dbWriter: RunEventWriter = {
   async write(event) {
-    await prisma.runEvent.create({
-      data: {
-        runId: event.runId,
-        offsetMs: event.offsetMs,
-        type: event.type,
-        agentId: event.agentId,
-        payload: event.payload as any,
-      },
-    });
+    try {
+      await prisma.runEvent.create({
+        data: {
+          runId: event.runId,
+          offsetMs: event.offsetMs,
+          type: event.type,
+          agentId: event.agentId,
+          payload: event.payload as any,
+        },
+      });
+    } catch {
+      // DB not available (local dev without Postgres) — events still stream via SSE
+    }
   },
 };
 
 let currentHub = new SSEHub({ dbWriter });
+
+// Track spawned agents across runs for the /api/agents endpoint
+const spawnedAgentsRef: { current: SpawnedAgent[] } = { current: [] };
+export function setSpawnedAgents(agents: SpawnedAgent[]) {
+  spawnedAgentsRef.current = agents;
+}
 
 const app = Fastify({ logger: true });
 await app.register(cors, { origin: true });
@@ -41,6 +51,22 @@ app.get("/health", async () => ({ ok: true, service: "planner" }));
 app.get("/api/events", (request, reply) => {
   currentHub.addClient(reply.raw);
   request.raw.on("close", () => currentHub.removeClient(reply.raw));
+});
+
+// Spawned agents endpoint
+app.get("/api/agents", async () => {
+  return {
+    agents: spawnedAgentsRef.current.map((a) => ({
+      id: a.id,
+      role: a.role,
+      address: a.address,
+      status: a.status,
+      fundingTxHash: a.fundingTxHash,
+      passportTxHash: a.passportTxHash,
+      sessionTxHash: a.sessionTxHash,
+      createdAt: a.createdAt,
+    })),
+  };
 });
 
 // SSE replay endpoint
@@ -80,14 +106,13 @@ app.get<{ Params: { runId: string } }>("/api/replay/:runId", async (request, rep
 app.post("/api/webhook/email", async (request) => {
   const body = request.body as { from?: string; subject?: string; body?: string; text?: string };
   const humanEmail = {
-    from: body.from || "unknown@example.com",
+    from: body.from || mailAddresses?.plannerInbox.address || "tripdesk-planner@agentmail.to",
     subject: body.subject || "Trip Request",
     body: body.body || body.text || "Plan my trip",
   };
 
-  // Start trip planning in background — reuse hub so SSE clients stay connected
   currentHub.newRun();
-  runTripPlan({ humanEmail, sseHub: currentHub, config, plannerInboxAddress: mailAddresses?.plannerInbox.address }).catch((err) => {
+  runDynamicTripPlan({ humanEmail, sseHub: currentHub, config, plannerInboxAddress: mailAddresses?.plannerInbox.address }).catch((err) => {
     app.log.error(err, "Trip planning failed");
     currentHub.emit({ type: "error", agentId: "planner", payload: { message: (err as Error).message } });
   });
@@ -105,11 +130,12 @@ app.post("/api/trigger", async (request) => {
   };
 
   const action = body.action || "plan-trip";
+  const defaultHumanEmail = mailAddresses?.plannerInbox.address || "tripdesk-planner@agentmail.to";
 
   const humanEmail = {
-    from: body.from || "demo@ethdenver.com",
+    from: body.from || defaultHumanEmail,
     subject: body.subject || "ETHDenver Trip",
-    body: body.body || "I'm flying into Denver on Feb 19 for ETHDenver. Into AI agents and blockchain payments. Plan my trip -- need rides from the airport, good restaurants, and sign me up for cool AI/crypto events on Luma. Name: Rachit, email: rachit@example.com",
+    body: body.body || `I'm flying into Denver on Feb 19 for ETHDenver. Into AI agents and blockchain payments. Plan my trip -- need rides from the airport, good restaurants, and sign me up for cool AI/crypto events on Luma. Name: Rachit, email: ${defaultHumanEmail}`,
   };
 
   if (action === "additional-search") {
@@ -121,7 +147,7 @@ app.post("/api/trigger", async (request) => {
   }
 
   currentHub.newRun();
-  runTripPlan({ humanEmail, sseHub: currentHub, config, plannerInboxAddress: mailAddresses?.plannerInbox.address }).catch((err) => {
+  runDynamicTripPlan({ humanEmail, sseHub: currentHub, config, plannerInboxAddress: mailAddresses?.plannerInbox.address }).catch((err) => {
     app.log.error(err, "Trip planning failed");
     currentHub.emit({ type: "error", agentId: "planner", payload: { message: (err as Error).message } });
   });
@@ -135,9 +161,6 @@ app.get("/api/mail-addresses", async () => {
   return {
     configured: true,
     planner: mailAddresses.plannerInbox.address,
-    rider: mailAddresses.riderInbox.address,
-    foodie: mailAddresses.foodieInbox.address,
-    eventbot: mailAddresses.eventbotInbox.address,
   };
 });
 

@@ -48,18 +48,12 @@ interface ServiceStatus {
 /* ------------------------------------------------------------------ */
 
 const AGENT_WALLETS: { name: string; envKey: string; color: string }[] = [
-  { name: "Planner", envKey: "NEXT_PUBLIC_PLANNER_ADDRESS", color: "#3b82f6" },
-  { name: "Rider", envKey: "NEXT_PUBLIC_RIDER_ADDRESS", color: "#22d3ee" },
-  { name: "Foodie", envKey: "NEXT_PUBLIC_FOODIE_ADDRESS", color: "#f59e0b" },
-  { name: "EventBot", envKey: "NEXT_PUBLIC_EVENTBOT_ADDRESS", color: "#ef4444" },
+  { name: "Orchestrator", envKey: "NEXT_PUBLIC_PLANNER_ADDRESS", color: "#3b82f6" },
 ];
 
 function getAgentAddress(envKey: string): string {
   const envMap: Record<string, string | undefined> = {
     NEXT_PUBLIC_PLANNER_ADDRESS: process.env.NEXT_PUBLIC_PLANNER_ADDRESS,
-    NEXT_PUBLIC_RIDER_ADDRESS: process.env.NEXT_PUBLIC_RIDER_ADDRESS,
-    NEXT_PUBLIC_FOODIE_ADDRESS: process.env.NEXT_PUBLIC_FOODIE_ADDRESS,
-    NEXT_PUBLIC_EVENTBOT_ADDRESS: process.env.NEXT_PUBLIC_EVENTBOT_ADDRESS,
   };
   return envMap[envKey] || "";
 }
@@ -98,23 +92,23 @@ const STEP_CONFIG = [
     icon: Wallet,
   },
   {
-    title: "Fund Wallets",
-    description: "Fund each agent wallet using the Kite faucet so they can transact on-chain.",
+    title: "Fund Orchestrator",
+    description: "Fund the orchestrator wallet using the Kite faucet. Sub-agents are funded dynamically at runtime.",
     icon: Coins,
   },
   {
-    title: "Deploy Passports",
-    description: "Deploy an on-chain passport for each agent to authorize their actions.",
+    title: "Deploy Passport",
+    description: "Deploy an on-chain passport for the orchestrator. Sub-agent passports are created dynamically.",
     icon: Shield,
   },
   {
-    title: "Create Sessions",
-    description: "Grant session keys so agents can act within their authorized scopes.",
+    title: "Create Session",
+    description: "Grant a session key for the orchestrator to act within its authorized scopes.",
     icon: Key,
   },
   {
     title: "Readiness Check",
-    description: "Verify that the gateway and planner services are online and responding.",
+    description: "Verify the orchestrator service is online and responding.",
     icon: Activity,
   },
   {
@@ -151,13 +145,7 @@ export function SetupWizard() {
   // Step 5: Readiness
   const [services, setServices] = useState<ServiceStatus[]>([
     {
-      name: "Gateway",
-      url: process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4001",
-      healthy: null,
-      checking: false,
-    },
-    {
-      name: "Planner",
+      name: "Orchestrator",
       url: process.env.NEXT_PUBLIC_PLANNER_URL || "http://localhost:4005",
       healthy: null,
       checking: false,

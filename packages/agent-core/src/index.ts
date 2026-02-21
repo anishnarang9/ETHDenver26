@@ -3,3 +3,5 @@ export * from "./browser.js";
 export * from "./agentmail.js";
 export * from "./pieverse.js";
 export * from "./sse-emitter.js";
+export * from "./agent-spawner.js";
+export * from "./browser-tools.js";

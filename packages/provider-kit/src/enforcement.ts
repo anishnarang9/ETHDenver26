@@ -285,11 +285,11 @@ export const enforcementErrorHandler = async (
     return;
   }
 
-  request.log.error({ err: error }, "Unhandled enforcement error");
+  request.log.error({ err: error, stack: error.stack, name: error.constructor.name }, "Unhandled enforcement error");
   if (!reply.sent) {
     reply.status(500).send({
       code: "PAYMENT_INVALID",
-      message: "unexpected server error",
+      message: `unexpected server error: ${error.message}`,
     });
   }
 };

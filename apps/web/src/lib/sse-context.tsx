@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useReducer, useCallback, type ReactNode } from "react";
+import React, { createContext, useContext, useReducer, useCallback, type ReactNode } from "react";
 import { useSSE, type SSEMessage } from "../hooks/use-sse";
 
 interface Email {
@@ -38,6 +38,18 @@ interface Transaction {
   timestamp: string;
 }
 
+export interface SpawnedAgentInfo {
+  id: string;
+  role: string;
+  address?: string;
+  status: "spawning" | "active" | "completed" | "failed" | "revoked";
+  step?: string;
+  txHash?: string;
+  fundingTxHash?: string;
+  passportTxHash?: string;
+  sessionTxHash?: string;
+}
+
 interface SSEState {
   emails: Email[];
   browsers: Record<string, BrowserPanel>;
@@ -45,6 +57,9 @@ interface SSEState {
   transactions: Transaction[];
   thoughts: Record<string, string>;
   agentStatuses: Record<string, string>;
+  spawnedAgents: SpawnedAgentInfo[];
+  orchestratorPhase: string;
+  agentPlan: Array<{ role: string; needsBrowser: boolean; scopes: string[] }>;
   currentRunId?: string;
 }
 
@@ -58,19 +73,23 @@ type SSEAction =
   | { type: "PAYMENT_COMPLETE"; payload: SSEMessage }
   | { type: "PAYMENT_FAILED"; payload: SSEMessage }
   | { type: "AGENT_STATUS"; payload: SSEMessage }
+  | { type: "AGENT_SPAWNING"; payload: SSEMessage }
+  | { type: "AGENT_SPAWNED"; payload: SSEMessage }
+  | { type: "AGENT_PLAN_CREATED"; payload: SSEMessage }
+  | { type: "ORCHESTRATOR_PHASE"; payload: SSEMessage }
+  | { type: "AGENT_RESULTS"; payload: SSEMessage }
   | { type: "RESET" };
 
 const initialState: SSEState = {
   emails: [],
-  browsers: {
-    rider: { agentId: "rider", status: "standby" },
-    foodie: { agentId: "foodie", status: "standby" },
-    eventbot: { agentId: "eventbot", status: "standby" },
-  },
+  browsers: {},
   enforcementSteps: [],
   transactions: [],
   thoughts: {},
   agentStatuses: {},
+  spawnedAgents: [],
+  orchestratorPhase: "",
+  agentPlan: [],
 };
 
 function sseReducer(state: SSEState, action: SSEAction): SSEState {
@@ -128,7 +147,7 @@ function sseReducer(state: SSEState, action: SSEAction): SSEState {
         ...state,
         transactions: [...state.transactions, {
           id: `tx-${Date.now()}-${Math.random()}`,
-          from: "planner",
+          from: action.payload.agentId || "planner",
           to: (p.target as string) || "",
           amount: (p.amount as string) || "",
           method: (p.method as string) || "pending",
@@ -159,7 +178,85 @@ function sseReducer(state: SSEState, action: SSEAction): SSEState {
       return {
         ...state,
         agentStatuses: { ...state.agentStatuses, [action.payload.agentId]: action.payload.payload.status as string },
+        spawnedAgents: state.spawnedAgents.map((a) =>
+          a.id === action.payload.agentId
+            ? { ...a, status: (action.payload.payload.status as SpawnedAgentInfo["status"]) || a.status }
+            : a,
+        ),
       };
+    }
+    case "AGENT_SPAWNING": {
+      const p = action.payload.payload;
+      const agentId = action.payload.agentId;
+      const existing = state.spawnedAgents.find((a) => a.id === agentId);
+      if (existing) {
+        return {
+          ...state,
+          spawnedAgents: state.spawnedAgents.map((a) =>
+            a.id === agentId
+              ? {
+                  ...a,
+                  step: p.step as string,
+                  txHash: (p.txHash as string) || a.txHash,
+                  address: (p.address as string) || a.address,
+                  fundingTxHash: p.step === "funded" ? (p.txHash as string) : a.fundingTxHash,
+                  passportTxHash: p.step === "passport_deployed" ? (p.txHash as string) : a.passportTxHash,
+                  sessionTxHash: p.step === "session_granted" ? (p.txHash as string) : a.sessionTxHash,
+                  status: p.step === "failed" ? "failed" : a.status,
+                }
+              : a,
+          ),
+        };
+      }
+      return {
+        ...state,
+        spawnedAgents: [
+          ...state.spawnedAgents,
+          {
+            id: agentId,
+            role: p.role as string,
+            address: p.address as string,
+            status: "spawning",
+            step: p.step as string,
+          },
+        ],
+      };
+    }
+    case "AGENT_SPAWNED": {
+      const p = action.payload.payload;
+      const agentId = action.payload.agentId;
+      return {
+        ...state,
+        spawnedAgents: state.spawnedAgents.map((a) =>
+          a.id === agentId
+            ? {
+                ...a,
+                status: "active" as const,
+                address: (p.address as string) || a.address,
+                fundingTxHash: (p.fundingTxHash as string) || a.fundingTxHash,
+                passportTxHash: (p.passportTxHash as string) || a.passportTxHash,
+                sessionTxHash: (p.sessionTxHash as string) || a.sessionTxHash,
+              }
+            : a,
+        ),
+      };
+    }
+    case "AGENT_PLAN_CREATED": {
+      const p = action.payload.payload;
+      return {
+        ...state,
+        agentPlan: (p.agents as SSEState["agentPlan"]) || [],
+      };
+    }
+    case "ORCHESTRATOR_PHASE": {
+      const p = action.payload.payload;
+      return {
+        ...state,
+        orchestratorPhase: (p.phase as string) || "",
+      };
+    }
+    case "AGENT_RESULTS": {
+      return state;
     }
     case "RESET":
       return { ...initialState };
@@ -177,7 +274,14 @@ const SSEContext = createContext<{
 export function SSEProvider({ url, children }: { url: string; children: ReactNode }) {
   const [state, dispatch] = useReducer(sseReducer, initialState);
 
+  const currentRunRef = React.useRef<string | undefined>(undefined);
+
   const handleMessage = useCallback((msg: SSEMessage) => {
+    if (msg.runId && msg.runId !== currentRunRef.current) {
+      currentRunRef.current = msg.runId;
+      dispatch({ type: "RESET" });
+    }
+
     const typeMap: Record<string, SSEAction["type"]> = {
       email_received: "EMAIL_RECEIVED",
       email_sent: "EMAIL_SENT",
@@ -188,6 +292,11 @@ export function SSEProvider({ url, children }: { url: string; children: ReactNod
       payment_complete: "PAYMENT_COMPLETE",
       payment_failed: "PAYMENT_FAILED",
       agent_status: "AGENT_STATUS",
+      agent_spawning: "AGENT_SPAWNING",
+      agent_spawned: "AGENT_SPAWNED",
+      agent_plan_created: "AGENT_PLAN_CREATED",
+      orchestrator_phase: "ORCHESTRATOR_PHASE",
+      agent_results: "AGENT_RESULTS",
     };
     const actionType = typeMap[msg.type];
     if (actionType) {

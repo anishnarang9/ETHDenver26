@@ -35,6 +35,9 @@ export function useSSE(url: string, onMessage: (msg: SSEMessage) => void) {
       "browser_session", "browser_screenshot", "enforcement_step",
       "payment_start", "payment_complete", "payment_failed",
       "wallet_update", "agent_status", "error", "replay_complete",
+      // Dynamic agent events
+      "agent_spawning", "agent_spawned", "agent_plan_created",
+      "orchestrator_phase", "agent_results",
     ];
 
     for (const type of eventTypes) {

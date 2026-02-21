@@ -159,3 +159,20 @@ model RunEvent {
 
   @@index([runId, offsetMs])
 }
+
+model SpawnedAgent {
+  id               String   @id @default(cuid())
+  runId            String
+  role             String
+  walletAddress    String
+  status           String   @default("spawning")
+  fundingTxHash    String?
+  passportTxHash   String?
+  sessionTxHash    String?
+  resultJson       Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([runId, createdAt])
+  @@index([walletAddress])
+}

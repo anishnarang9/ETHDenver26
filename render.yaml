@@ -46,7 +46,7 @@ envVarGroups:
         value: "20.11.0"
 
 services:
-  # ── Gateway (existing) ─────────────────────────────
+  # ── Gateway (enforcement demo) ────────────────────────
   - type: web
     name: kite-gateway
     runtime: node
@@ -72,49 +72,7 @@ services:
         value: "0.05"
       - fromGroup: kite-shared-env
 
-  # ── Rider Agent ─────────────────────────────────────
-  - type: web
-    name: kite-rider
-    runtime: node
-    plan: free
-    buildCommand: npm install -g pnpm@9.12.2 && NODE_ENV=development pnpm install
-    startCommand: npx tsx apps/rider/src/index.ts
-    envVars:
-      - key: PORT
-        value: "10000"
-      - key: HOST
-        value: "0.0.0.0"
-      - fromGroup: kite-shared-env
-
-  # ── Foodie Agent ────────────────────────────────────
-  - type: web
-    name: kite-foodie
-    runtime: node
-    plan: free
-    buildCommand: npm install -g pnpm@9.12.2 && NODE_ENV=development pnpm install
-    startCommand: npx tsx apps/foodie/src/index.ts
-    envVars:
-      - key: PORT
-        value: "10000"
-      - key: HOST
-        value: "0.0.0.0"
-      - fromGroup: kite-shared-env
-
-  # ── EventBot Agent ──────────────────────────────────
-  - type: web
-    name: kite-eventbot
-    runtime: node
-    plan: free
-    buildCommand: npm install -g pnpm@9.12.2 && NODE_ENV=development pnpm install
-    startCommand: npx tsx apps/eventbot/src/index.ts
-    envVars:
-      - key: PORT
-        value: "10000"
-      - key: HOST
-        value: "0.0.0.0"
-      - fromGroup: kite-shared-env
-
-  # ── Planner Orchestrator ────────────────────────────
+  # ── Planner Orchestrator (single service — spawns agents dynamically) ──
   - type: web
     name: kite-planner
     runtime: node
@@ -130,21 +88,8 @@ services:
         value: "10000"
       - key: HOST
         value: "0.0.0.0"
-      - key: RIDER_URL
-        fromService:
-          type: web
-          name: kite-rider
-          property: hostport
-      - key: FOODIE_URL
-        fromService:
-          type: web
-          name: kite-foodie
-          property: hostport
-      - key: EVENTBOT_URL
-        fromService:
-          type: web
-          name: kite-eventbot
-          property: hostport
       - key: KITE_WEATHER_URL
         value: https://x402.dev.gokite.ai
+      - key: PLANNER_BASE_URL
+        value: https://kite-planner.onrender.com
       - fromGroup: kite-shared-env
