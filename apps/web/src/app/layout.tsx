@@ -21,7 +21,7 @@ const monoFont = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "TripDesk Mission Control",
-  description: "Operational dashboard for autonomous multi-agent travel missions",
+  description: "Operational command center for autonomous multi-agent planning and execution",
 };
 
 export default function RootLayout({

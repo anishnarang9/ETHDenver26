@@ -4,20 +4,29 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import clsx from "clsx";
-import { Bell, Command, LayoutDashboard, Radar, ReceiptText, Settings, ShieldCheck, Sparkles } from "lucide-react";
+import { Bell, Home, LayoutDashboard, Radar, ReceiptText, Settings, ShieldCheck, Sparkles } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/missions", label: "Missions", icon: Radar },
   { href: "/enforcement", label: "Enforcement", icon: ShieldCheck },
   { href: "/agents", label: "Agents", icon: Sparkles },
   { href: "/payments", label: "Payments", icon: ReceiptText },
   { href: "/settings", label: "Settings", icon: Settings },
-  { href: "/styleguide", label: "Styleguide", icon: Command },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const isLandingPage = pathname === "/";
+
+  if (isLandingPage) {
+    return (
+      <div className="scanline">
+        <div className="content-layer min-h-screen">{children}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="scanline">
@@ -69,10 +78,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <p className="mono text-sm text-text-0">M-2026-0217-DEN</p>
               </div>
               <div className="flex items-center gap-2">
+                <Link href="/" className="rounded-lg border border-line bg-bg-1 px-3 py-1.5 text-sm text-text-1 hover:text-text-0">
+                  <Home size={14} className="mr-1 inline-block" />
+                  Back Home
+                </Link>
                 <button className="rounded-lg border border-line bg-bg-1 px-3 py-1.5 text-sm text-text-1 hover:text-text-0">
                   <Bell size={14} className="mr-1 inline-block" />
                   Alerts
                 </button>
+                <ThemeToggle />
                 <button className="rounded-lg border border-accent-cyan/40 bg-accent-cyan/15 px-3 py-1.5 text-sm text-accent-cyan">
                   Start Mission
                 </button>
