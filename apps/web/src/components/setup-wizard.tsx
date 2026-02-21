@@ -381,9 +381,11 @@ export function SetupWizard() {
 
     for (const svc of services) {
       try {
+        // Render free tier can cold-start in 10-15s, so use a generous timeout
         const response = await fetch(`${svc.url}/health`, {
           method: "GET",
-          signal: AbortSignal.timeout(5000),
+          mode: "cors",
+          signal: AbortSignal.timeout(20000),
         }).catch(() => null);
 
         const healthy = response !== null && response.ok;
