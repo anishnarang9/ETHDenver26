@@ -36,13 +36,30 @@ export interface MissionControlProps {
   eventbotAddress?: string;
 }
 
-const DEFAULT_EMAIL_BODY = `Hi TripDesk! We're 6 college students from UMD heading to ETHDenver.
+const DEFAULT_EMAIL_SUBJECT = `ETHDenver Trip Planning — 6 Students from UMD (Feb 18–21)`;
 
-Flying into Denver Wed Feb 18 at 11 AM (DEN). Need a ride to our Airbnb at 2592 Meadowbrook Dr. Attending ETHDenver at 4850 Western Dr + AI side events. Want budget Chinese & Mexican restaurants ($10-15/person).
+const DEFAULT_EMAIL_BODY = `Hi TripDesk! We're a group of 6 college students from the University of Maryland heading to ETHDenver 2025 and need help planning the full trip.
 
-Return flight: Sat Feb 21 at 4:30 PM from DEN — need a ride from the venue to the airport by 2 PM.
+## Travel Details
+- **Group size:** 6 students (all early 20s, no mobility needs)
+- **Outbound flight:** Wednesday Feb 18, arriving Denver International Airport (DEN) at ~11:00 AM local time
+- **Return flight:** Saturday Feb 21, 4:30 PM from DEN. We need to leave the ETHDenver venue at 4850 Western Dr by ~2:00 PM to make our flight.
+- **Accommodation:** Airbnb already booked at 2592 Meadowbrook Dr, Denver CO
 
-Plan our Wed-Sat itinerary please!`;
+## What We Need
+1. **Airport ride (arrival):** Cheapest/fastest option from DEN → 2592 Meadowbrook Dr on Wednesday ~11 AM. We're 6 people so may need XL or two separate rides — compare Uber, Lyft, and shuttle options.
+2. **Airport ride (departure):** Ride from the ETHDenver venue at 4850 Western Dr → DEN on Saturday Feb 21, leaving by ~2:00 PM to catch our 4:30 PM flight.
+3. **Daily conference transport:** We're attending the main ETHDenver conference at 4850 Western Dr all week. Need transport from our Airbnb to the venue and back each day.
+4. **Side events:** Find AI and blockchain side events during ETHDenver week (Feb 18–21). We especially want AI agent talks, hackathon workshops, and crypto/DeFi meetups. Check lu.ma, Eventbrite, and the ETHDenver side event schedule.
+5. **Restaurants:** Budget-friendly Chinese and Mexican spots near the venue or our Airbnb. College student budget — $10–15 per person max. We'll eat out every dinner.
+6. **Local transport:** For daily Denver travel, prioritize shortest travel time. Compare RTD light rail, bus, and rideshare.
+
+## Budget & Priorities
+- **Budget:** Tight — minimize costs wherever possible
+- **Pace:** Relaxed. Conference during the day, food and chill at night.
+- **Priority order:** ETHDenver main event → AI/crypto side events → good cheap food → exploring Denver
+
+Please build us a day-by-day itinerary from Wed Feb 18 through Sat Feb 21 with transport options, restaurant picks, and event recommendations.`;
 
 export function MissionControl({
   transactions,
@@ -55,6 +72,7 @@ export function MissionControl({
 }: MissionControlProps) {
   const [actionStatus, setActionStatus] = useState<string>("");
   const [plannerEmail, setPlannerEmail] = useState<string>("");
+  const [emailSubject, setEmailSubject] = useState(DEFAULT_EMAIL_SUBJECT);
   const [emailBody, setEmailBody] = useState(DEFAULT_EMAIL_BODY);
   const [sending, setSending] = useState(false);
   const [showDemoButtons, setShowDemoButtons] = useState(false);
@@ -86,7 +104,7 @@ export function MissionControl({
         body: JSON.stringify({
           action: "plan-trip",
           body: emailBody.trim(),
-          subject: "Trip Planning Request",
+          subject: emailSubject.trim() || DEFAULT_EMAIL_SUBJECT,
         }),
       });
       const data = await res.json();
@@ -173,6 +191,34 @@ export function MissionControl({
           <span style={{ color: "#818cf8", fontFamily: "monospace", fontSize: "0.62rem" }}>
             {plannerEmail || "tripdesk-planner@agentmail.to"}
           </span>
+        </div>
+
+        {/* Subject field */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "6px 10px",
+            borderBottom: "1px solid #1e293b",
+            fontSize: "0.68rem",
+          }}
+        >
+          <span style={{ color: "#64748b", flexShrink: 0 }}>Subject:</span>
+          <input
+            type="text"
+            value={emailSubject}
+            onChange={(e) => setEmailSubject(e.target.value)}
+            style={{
+              flex: 1,
+              background: "transparent",
+              border: "none",
+              color: "#e2e8f0",
+              fontSize: "0.68rem",
+              fontFamily: "inherit",
+              outline: "none",
+            }}
+          />
         </div>
 
         {/* Body */}
