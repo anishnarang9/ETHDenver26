@@ -9,12 +9,10 @@ import {
 const PASSPORT_ABI = [
   "function upsertPassport(address agent,uint64 expiresAt,uint128 perCallCap,uint128 dailyCap,uint32 rateLimitPerMin,bytes32[] scopes,bytes32[] services)",
   "function revokePassport(address agent)",
-  "function getPassport(address agent) view returns (address owner,address agentAddress,uint64 expiresAt,uint128 perCallCap,uint128 dailyCap,uint32 rateLimitPerMin,bool revoked,uint32 version,uint64 updatedAt,bytes32[] scopes,bytes32[] services)",
 ];
 
 const SESSION_ABI = [
   "function grantSession(address agent,address session,uint64 expiresAt,bytes32[] scopeSubset)",
-  "function isSessionActive(address session) view returns (bool)",
 ];
 
 export interface PassportWriteInput {
@@ -46,47 +44,23 @@ const getRequiredAddress = (value: string | undefined, name: string): `0x${strin
   return value as `0x${string}`;
 };
 
-const switchOrAddChain = async (ethereum: Eip1193Provider, expectedChainId: string) => {
-  const hexChainId = "0x" + Number(expectedChainId).toString(16);
-  try {
-    await (ethereum as unknown as { request: (args: { method: string; params: unknown[] }) => Promise<void> }).request({
-      method: "wallet_switchEthereumChain",
-      params: [{ chainId: hexChainId }],
-    });
-  } catch (switchErr: unknown) {
-    // Error code 4902 = chain not added yet — try adding it
-    if ((switchErr as { code?: number }).code === 4902) {
-      const rpcUrl = process.env.NEXT_PUBLIC_KITE_RPC_URL || "https://rpc-testnet.gokite.ai/";
-      const explorer = process.env.NEXT_PUBLIC_EXPLORER_BASE_URL || "https://testnet.kitescan.ai";
-      await (ethereum as unknown as { request: (args: { method: string; params: unknown[] }) => Promise<void> }).request({
-        method: "wallet_addEthereumChain",
-        params: [{
-          chainId: hexChainId,
-          chainName: "Kite AI Testnet",
-          nativeCurrency: { name: "KITE", symbol: "KITE", decimals: 18 },
-          rpcUrls: [rpcUrl],
-          blockExplorerUrls: [explorer],
-        }],
-      });
-    } else {
-      throw switchErr;
-    }
+const assertExpectedChain = (expectedChainId: string | undefined, actualChainId: bigint) => {
+  if (!expectedChainId) {
+    return;
+  }
+
+  if (Number(actualChainId) !== Number(expectedChainId)) {
+    throw new Error(
+      `Wrong network in wallet. Expected chainId ${expectedChainId}, got ${actualChainId.toString()}.`
+    );
   }
 };
 
 const getSigner = async (): Promise<JsonRpcSigner> => {
-  const ethereum = getEthereum();
-  const provider = new BrowserProvider(ethereum);
+  const provider = new BrowserProvider(getEthereum());
   const expectedChainId = process.env.NEXT_PUBLIC_CHAIN_ID;
   const network = await provider.getNetwork();
-
-  if (expectedChainId && Number(network.chainId) !== Number(expectedChainId)) {
-    // Auto-switch to the correct chain
-    await switchOrAddChain(ethereum, expectedChainId);
-    // Re-create provider after chain switch
-    const newProvider = new BrowserProvider(ethereum);
-    return newProvider.getSigner();
-  }
+  assertExpectedChain(expectedChainId, network.chainId);
 
   return provider.getSigner();
 };
@@ -99,72 +73,9 @@ const buildExplorerLink = (txHash: string): string | null => {
   return `${base.replace(/\/$/, "")}/tx/${txHash}`;
 };
 
-export const onchainTestUtils = {
-  getEthereum,
-  getRequiredAddress,
-  switchOrAddChain,
-  buildExplorerLink,
-};
-
-/**
- * Read-only: check if a valid (non-revoked, non-expired) passport exists for an agent.
- * Uses a plain JsonRpcProvider so no wallet connection is needed.
- */
-export const checkPassportExists = async (
-  agentAddress: string,
-): Promise<{ exists: boolean; owner?: string; expired?: boolean; revoked?: boolean }> => {
-  try {
-    const rpcUrl = process.env.NEXT_PUBLIC_KITE_RPC_URL || "https://rpc-testnet.gokite.ai/";
-    const provider = new ethers.JsonRpcProvider(rpcUrl);
-    const passportAddr = getRequiredAddress(
-      process.env.NEXT_PUBLIC_PASSPORT_REGISTRY_ADDRESS,
-      "NEXT_PUBLIC_PASSPORT_REGISTRY_ADDRESS"
-    );
-    const passport = new Contract(passportAddr, PASSPORT_ABI, provider);
-    const result = await passport.getPassport(agentAddress);
-    const owner = result[0] as string;
-    const expiresAt = Number(result[2]);
-    const revoked = result[6] as boolean;
-
-    if (owner === ethers.ZeroAddress) return { exists: false };
-    const expired = expiresAt > 0 && Math.floor(Date.now() / 1000) >= expiresAt;
-    if (revoked) return { exists: false, owner, revoked: true };
-    if (expired) return { exists: false, owner, expired: true };
-    return { exists: true, owner };
-  } catch {
-    return { exists: false };
-  }
-};
-
-/**
- * Read-only: check if an active session exists for an agent/session address.
- */
-export const checkSessionExists = async (
-  sessionAddress: string,
-): Promise<boolean> => {
-  try {
-    const rpcUrl = process.env.NEXT_PUBLIC_KITE_RPC_URL || "https://rpc-testnet.gokite.ai/";
-    const provider = new ethers.JsonRpcProvider(rpcUrl);
-    const sessionAddr = getRequiredAddress(
-      process.env.NEXT_PUBLIC_SESSION_REGISTRY_ADDRESS,
-      "NEXT_PUBLIC_SESSION_REGISTRY_ADDRESS"
-    );
-    const sessionContract = new Contract(sessionAddr, SESSION_ABI, provider);
-    return await sessionContract.isSessionActive(sessionAddress) as boolean;
-  } catch {
-    return false;
-  }
-};
-
 export const upsertPassportOnchain = async (
   input: PassportWriteInput
-): Promise<{ txHash: string; explorerLink: string | null; skipped?: boolean }> => {
-  // Check if a valid passport already exists — skip if it does
-  const existing = await checkPassportExists(input.agentAddress);
-  if (existing.exists) {
-    return { txHash: "already-exists", explorerLink: null, skipped: true };
-  }
-
+): Promise<{ txHash: string; explorerLink: string | null }> => {
   const signer = await getSigner();
   const passportAddress = getRequiredAddress(
     process.env.NEXT_PUBLIC_PASSPORT_REGISTRY_ADDRESS,
@@ -194,13 +105,7 @@ export const grantSessionOnchain = async (input: {
   sessionAddress: string;
   expiresAt: number;
   scopes: string[];
-}): Promise<{ txHash: string; explorerLink: string | null; skipped?: boolean }> => {
-  // Check if an active session already exists — skip if it does
-  const active = await checkSessionExists(input.sessionAddress);
-  if (active) {
-    return { txHash: "already-exists", explorerLink: null, skipped: true };
-  }
-
+}): Promise<{ txHash: string; explorerLink: string | null }> => {
   const signer = await getSigner();
   const sessionAddress = getRequiredAddress(
     process.env.NEXT_PUBLIC_SESSION_REGISTRY_ADDRESS,
