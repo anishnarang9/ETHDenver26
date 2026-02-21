@@ -104,7 +104,7 @@ export async function handleFindRides(opts: {
   }
 
   const result = await runAgentLoop({
-    model: "gpt-5-mini",
+    model: "gpt-5.2",
     systemPrompt: `You are a transportation research agent. Given origin, destination, and date, find ride options.
 If you have browser tools, use them to search Google Maps for distance/travel time, then check ride estimation sites.
 If no browser tools are available, use your knowledge to estimate ride options.

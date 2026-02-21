@@ -101,7 +101,7 @@ export async function runDynamicTripPlan(opts: {
   });
 
   await runAgentLoop({
-    model: "gpt-4o",
+    model: "gpt-5.2",
     systemPrompt: `You are TripDesk Orchestrator. Your job is to analyze a trip planning request and decide which specialist agents to spawn.
 
 First, call get_weather to check weather at the destination.
@@ -246,7 +246,7 @@ Each agent gets a real on-chain wallet, passport, and optional browser session. 
         });
 
         const result = await runAgentLoop({
-          model: "gpt-4o",
+          model: "gpt-5.2",
           systemPrompt: entry.systemPrompt + "\n\nIMPORTANT: When you have gathered your findings, call report_results with a JSON summary. Be thorough but efficient.",
           userMessage: entry.task,
           tools,
@@ -310,7 +310,7 @@ Each agent gets a real on-chain wallet, passport, and optional browser session. 
     .join("\n\n");
 
   await runAgentLoop({
-    model: "gpt-4o",
+    model: "gpt-5.2",
     systemPrompt: `You are TripDesk Synthesizer. Compile the results from multiple specialist agents into a beautiful, well-organized travel itinerary.
 
 The itinerary should include:
