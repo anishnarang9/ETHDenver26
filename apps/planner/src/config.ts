@@ -22,6 +22,7 @@ const EnvSchema = z.object({
   EVENTBOT_URL: z.string().optional().default("http://localhost:4004"),
   KITE_WEATHER_URL: z.string().optional().default("https://x402.dev.gokite.ai"),
   FACILITATOR_URL: z.string().optional().default("https://facilitator.pieverse.io"),
+  PLANNER_BASE_URL: z.string().optional().default("http://localhost:4005"),
 });
 
 export type PlannerEnv = z.infer<typeof EnvSchema>;
