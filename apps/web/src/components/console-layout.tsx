@@ -218,13 +218,15 @@ export function ConsoleLayout({ plannerUrl }: { plannerUrl: string }) {
           </h2>
           {agentCount > 0 ? (
             <div
+              className="agent-scroll"
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(" + gridCols + ", 1fr)",
                 gap: 12,
-                maxHeight: 440,
+                maxHeight: "calc(100vh - 340px)",
                 overflowY: "auto",
                 flex: 1,
+                paddingRight: 4,
               }}
             >
               <AnimatePresence>
