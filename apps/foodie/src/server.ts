@@ -31,7 +31,7 @@ const routePolicies: Record<string, RoutePolicy> = {
     routeId: "api.find-restaurants",
     scope: "food",
     service: "foodie",
-    priceAtomic: "1000000000000000000",
+    priceAtomic: "1000000000000000",
     rateLimitPerMin: 20,
     requirePayment: true,
   },
