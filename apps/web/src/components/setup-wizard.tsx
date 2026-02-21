@@ -208,11 +208,15 @@ export function SetupWizard() {
     const wallets: AgentWallet[] = [];
     for (const aw of AGENT_WALLETS) {
       const address = getAgentAddress(aw.envKey);
-      if (!address) continue;
+      if (!address) {
+        console.warn(`[fund-wallets] ${aw.envKey} is empty — env var not set`);
+        continue;
+      }
       try {
         const balance = await getTokenBalance(address);
         wallets.push({ name: aw.name, address, color: aw.color, balance });
-      } catch {
+      } catch (err) {
+        console.warn(`[fund-wallets] balance fetch failed for ${aw.name}:`, err);
         wallets.push({ name: aw.name, address, color: aw.color, balance: "0.00" });
       }
     }

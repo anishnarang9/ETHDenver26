@@ -15,8 +15,8 @@ export async function getTokenBalance(address: string, assetAddress?: string, rp
   try {
     const nativeBal = await provider.getBalance(address);
     nativeVal = Number(nativeBal) / 1e18;
-  } catch {
-    // RPC might fail, continue
+  } catch (err) {
+    console.warn("[kite-rpc] native balance fetch failed for", address, err);
   }
 
   // Check ERC-20 stablecoin balance
@@ -25,8 +25,8 @@ export async function getTokenBalance(address: string, assetAddress?: string, rp
     const token = new Contract(asset, ERC20_ABI, provider);
     const raw = await token.balanceOf(address);
     erc20Val = Number(raw) / 1e18;
-  } catch {
-    // Contract call might fail, continue
+  } catch (err) {
+    console.warn("[kite-rpc] ERC-20 balance fetch failed for", address, err);
   }
 
   // Return whichever is higher
