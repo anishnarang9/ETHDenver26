@@ -3,7 +3,7 @@
 ## Goals
 - Verify autonomous agent identity and delegation.
 - Enforce policy (scope, service allowlist, rate, budget, revocation).
-- Run machine-readable x402-style payment challenge and proof flow.
+- Run machine-readable x402-style payment challenge and proof flow (facilitator signature or direct transfer).
 - Record receipts on-chain for auditability.
 
 ## Components
@@ -19,10 +19,11 @@
   - `POST /api/enrich-wallet`
   - `POST /api/premium-intel`
 - Operational routes:
+  - `GET /health`
   - `GET /api/passport/:agent`
   - `GET /api/actions/:actionId`
   - `GET /api/timeline/:agent`
-  - `GET /api/timeline/:agent/stream`
+  - `GET /api/timeline/:agent/stream` (SSE)
 - Uses provider-kit middleware to enforce policy in strict order.
 - Supports runtime route pricing profiles:
   - `demo`: showcase prices
@@ -31,43 +32,55 @@
 
 Passport/session/revoke writes are executed directly from the web app via wallet signatures to on-chain contracts.
 
-### 3. Provider Kit (`packages/provider-kit`)
-- Reusable middleware and route policy config.
-- Dual header compatibility:
-  - Legacy `X-PAYMENT*`
-  - x402-style `PAYMENT-*`
-- Challenge generation and proof verification interfaces.
-- Includes in-memory implementations and sample Fastify provider.
+### 3. Planner + Specialist Agents (`apps/planner`, `apps/rider`, `apps/foodie`, `apps/eventbot`)
+- Planner orchestrates work, hires specialists, and handles weather calls.
+- Specialists expose priced routes:
+  - Rider: `POST /api/find-rides`
+  - Foodie: `POST /api/find-restaurants`
+  - EventBot: `POST /api/find-events`, `POST /api/register-event`
+- Each service runs provider-kit enforcement with in-memory stores (fast demo loop), while still verifying on-chain passport/session state.
+- SSE feed on each service at `GET /api/events`.
 
-### 4. Contracts (`packages/contracts`)
+### 4. Provider Kit (`packages/provider-kit`)
+- Reusable middleware + route policy config.
+- Signed envelope headers:
+  - `x-agent-address`, `x-session-address`, `x-timestamp`, `x-nonce`, `x-body-hash`, `x-signature`
+- Dual payment proof compatibility:
+  - Legacy `X-PAYMENT` + `X-ACTION-ID`
+  - x402-style `PAYMENT-SIGNATURE` + `X-ACTION-ID`
+  - Direct transfer via `X-TX-HASH` + `X-ACTION-ID`
+- Challenge headers include `PAYMENT-REQUIRED`, `PAYMENT-RESPONSE`, and `X-PAYMENT-RESPONSE`.
+- Includes in-memory stores for quotes, budgets, nonces, receipts, and events.
+
+### 5. Contracts (`packages/contracts`)
 - `PassportRegistry.sol`
 - `SessionRegistry.sol`
 - `ReceiptLog.sol`
 - Hardhat deploy script and unit tests.
 
-### 5. Runner (`apps/runner`)
+### 6. Runner (`apps/runner`)
 - Simulates autonomous agent loop:
   - Call priced route.
   - Receive 402 challenge.
-  - Pay via facilitator.
+  - Pay via facilitator (if enabled).
   - Fallback to direct ERC20 transfer.
   - Retry with proof.
-- Adds deterministic controls for route subset selection and loop iterations.
+- Deterministic controls for route subset selection and loop iterations.
 
-### 6. Persistence (`packages/db`)
+### 7. Persistence (`packages/db`)
 - Prisma/Postgres schema for timeline, actions, quotes, settlements, receipts, and nonce replay prevention.
 
 ## Enforcement Sequence
 1. Verify signed request envelope.
-2. Verify session active and delegated to agent.
-3. Verify passport exists, not revoked, not expired.
-4. Verify route scope and service allowlist.
-5. Check nonce replay.
+2. Check nonce replay (session + nonce).
+3. Verify session active, not revoked, delegated to agent.
+4. Verify passport exists, not revoked, not expired.
+5. Verify route scope and service allowlist.
 6. Check rate limit.
 7. Check per-call and daily budget caps.
 8. If no proof, return 402 challenge payload + dual headers.
 9. Verify payment proof (facilitator first, direct fallback).
-10. Record on-chain receipt and persist timeline event.
+10. Record receipt and persist timeline event.
 11. Return route response.
 
 ## Event Model

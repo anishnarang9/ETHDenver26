@@ -1,6 +1,6 @@
 <div align="center">
 
-# <img src="https://img.shields.io/badge/-%F0%9F%9B%A9%EF%B8%8F-black?style=for-the-badge" height="30" /> TripDesk v2
+# <img src="https://img.shields.io/badge/-%F0%9F%9B%A9%EF%B8%8F-black?style=for-the-badge" height="30" /> TripDesk
 
 ### LLM-Powered Multi-Agent Travel Concierge on Kite
 
@@ -37,15 +37,23 @@
 
 AI agents are becoming autonomous economic actors, but there's no standard way to:
 - **Govern** what an agent is allowed to do
-- **Pay** for services programmatically with on-chain settlement
+- **Pay** for services programmatically with on-chain settlement on core gateway routes
 - **Audit** every action with cryptographic proof
 - **Revoke** permissions instantly when something goes wrong
 
 ## Our Solution
 
-TripDesk is a **multi-agent travel concierge** where a team of AI agents collaboratively plan trips. Each agent has an **on-chain passport** defining its spending limits, allowed scopes, and services. Agents **hire each other** using the **x402 payment protocol** -- every transaction is settled on Kite and logged on-chain.
+TripDesk is a **multi-agent travel concierge** where a team of AI agents collaboratively plan trips. Each agent has an **on-chain passport** defining its spending limits, allowed scopes, and services. Agents **hire each other** using the **x402 payment protocol** -- gateway transactions are settled on Kite and logged on-chain, while specialist services keep in-memory verification for fast demos.
 
 An owner can **revoke any agent's passport** in real-time, instantly cutting off access. A live dashboard shows every decision, payment, and enforcement step as it happens.
+
+## System Guarantees
+
+- **Identity-bound requests** via signed envelopes (agent + session keys)
+- **Deterministic policy enforcement** with ordered checks and replay protection
+- **Proof-based payments** (facilitator signature or direct ERC-20 transfer)
+- **On-chain audit trail** for gateway receipts with idempotent action IDs
+- **Live observability** via SSE for every step, payment, and error path
 
 ---
 
@@ -61,7 +69,7 @@ An owner can **revoke any agent's passport** in real-time, instantly cutting off
                         +--+--------+--------+--+
                            |        |        |
                     hire   |        |        |   hire
-                  (0.5 KITE)       |       (0.5 KITE)
+                  (x402)   |        |        |  (x402)
                            |        |        |
                   +--------+  +-----+-----+  +--------+
                   |           |           |            |
@@ -69,7 +77,7 @@ An owner can **revoke any agent's passport** in real-time, instantly cutting off
             +---------+ +---------+ +-----------+ +---------+
             |  RIDER  | | FOODIE  | | EVENTBOT  | | WEATHER |
             | GPT-5.2 | | GPT-5.2 | |  GPT-5.2  | |  Kite   |
-            |  mini   | |  mini   | |           | |  x402   |
+            |         | |         | |           | |  x402   |
             +----+----+ +----+----+ +-----+-----+ +---------+
                  |           |            |
                  v           v            v
@@ -77,7 +85,7 @@ An owner can **revoke any agent's passport** in real-time, instantly cutting off
             Ride Sites   Restaurants  Events
 ```
 
-Every arrow above is an **x402 payment**. Every agent call passes through a **10-step enforcement pipeline**. Every payment is **settled on-chain**.
+Every arrow above is an **x402 payment** with a **signed envelope** and a **proof** on retry. Every agent call passes through a **10-step enforcement pipeline**. Gateway payments are **settled on-chain**; specialist demo services use in-memory verification.
 
 ---
 
@@ -151,6 +159,32 @@ flowchart TB
 
 ---
 
+## Protocol Primitives
+
+**Signed Request Envelope (all priced calls)**
+
+| Header | Purpose |
+|--------|---------|
+| `x-agent-address` | Agent identity address |
+| `x-session-address` | Delegated session key |
+| `x-timestamp` | Request timestamp (ISO) |
+| `x-nonce` | Replay protection |
+| `x-body-hash` | Canonical body hash |
+| `x-signature` | ECDSA signature over the canonical message |
+
+**Payment Proofs (retry after 402)**
+
+| Header | Purpose |
+|--------|---------|
+| `PAYMENT-SIGNATURE` | Facilitator-signed proof (x402 v2) |
+| `X-PAYMENT` | Legacy proof (x402 v1) |
+| `X-TX-HASH` | Direct ERC-20 transfer proof |
+| `X-ACTION-ID` | Action correlation for idempotency |
+
+The gateway replies with `PAYMENT-REQUIRED`, `PAYMENT-RESPONSE`, and `X-PAYMENT-RESPONSE` headers containing the payment challenge.
+
+---
+
 ## x402 Payment Flow
 
 Every agent-to-agent call follows the x402 protocol:
@@ -173,9 +207,9 @@ Every agent-to-agent call follows the x402 protocol:
     |   ERC-20 transfer         |                           |
     |-------------------------------------------------->    |
     |                           |                           |
-    |   Retry + X-TX-HASH       |                           |
+    |   Retry + PAYMENT-SIGNATURE or X-TX-HASH              |
     |-------------------------->|                           |
-    |                           |-- verify tx on-chain ---->|
+    |                           |-- verify facilitator/tx ->|
     |                           |-- record receipt -------->|
     |   HTTP 200 + response     |                           |
     |<--------------------------|                           |
@@ -198,9 +232,25 @@ Every request to a priced endpoint passes through these checks **in order**. If 
 | `07` | **Rate Limit** | Enforce per-minute request cap |
 | `08` | **Budget** | Check per-call and daily spending limits |
 | `09` | **Quote** | Issue 402 challenge if unpaid |
-| `10` | **Payment** | Verify on-chain settlement |
+| `10` | **Payment** | Verify proof (facilitator signature or on-chain transfer) |
 
 The dashboard visualizes this pipeline in real-time with animated step-by-step progression.
+After payment verification, the gateway records a receipt and persists timeline events.
+
+---
+
+## Data Model (Persistence Layer)
+
+| Entity | Purpose |
+|--------|---------|
+| `ActionAttempt` | One row per priced request (actionId, routeId, status) |
+| `PaymentQuote` | 402 challenges issued by the gateway |
+| `PaymentSettlement` | Verified payments with settlement reference + tx hash |
+| `Receipt` | On-chain receipt metadata + hashes |
+| `EnforcementEvent` | Step-by-step enforcement telemetry for the dashboard |
+| `Nonce` | Session nonce replay protection |
+
+This schema powers the timeline panel, action inspector, and audit replay features.
 
 ---
 
@@ -208,13 +258,13 @@ The dashboard visualizes this pipeline in real-time with animated step-by-step p
 
 | Agent | Role | LLM | Price | Capabilities |
 |-------|------|-----|-------|-------------|
-| **Planner** | Orchestrator | GPT-5.2 | -- | Hires specialists, manages budget, compiles itinerary |
-| **Rider** | Transport | GPT-5.2-mini | 0.5 KITE/call | Google Maps, ride-hailing research via Firecrawl |
-| **Foodie** | Restaurants | GPT-5.2-mini | 1.0 KITE/call | Yelp, Google Maps restaurant discovery |
-| **EventBot** | Events | GPT-5.2 | 0.5-1.0 KITE | lu.ma event search + real form-filling registration |
-| **Weather** | Climate | Kite API | x402 | Real Kite Weather API via Pieverse facilitator |
+| **Planner** | Orchestrator | GPT-5.2 | -- | Hires specialists, compiles itinerary, coordinates budgeted calls |
+| **Rider** | Transport | GPT-5.2 | 1e15 atomic/call (policy) | Google Maps, ride-hailing research via Firecrawl |
+| **Foodie** | Restaurants | GPT-5.2 | 1e15 atomic/call (policy) | Yelp, Google Maps restaurant discovery |
+| **EventBot** | Events | GPT-5.2 | 1e15 atomic/call (policy) | lu.ma event search + real form-filling registration |
+| **Weather** | Climate | Kite API | x402 | Kite Weather API via Pieverse facilitator |
 
-Each agent has its own wallet, LLM brain, and Firecrawl browser session. The Planner starts with **10 KITE tokens** and distributes them to specialists as payment for work.
+Each agent has its own wallet, LLM brain, and Firecrawl browser session. The Planner funds specialist calls via ERC-20 transfers and surfaces payment telemetry via SSE.
 
 ---
 
@@ -271,8 +321,8 @@ ETHDenver26/
 |   +-- web/              Next.js 15 dashboard (React 19, Tailwind 4, Framer Motion)
 |   +-- gateway/           Fastify enforcement API + x402 middleware
 |   +-- planner/           Orchestrator agent (GPT-5.2, function calling)
-|   +-- rider/             Transport specialist (GPT-5.2-mini, Firecrawl)
-|   +-- foodie/            Restaurant specialist (GPT-5.2-mini, Firecrawl)
+|   +-- rider/             Transport specialist (GPT-5.2, Firecrawl)
+|   +-- foodie/            Restaurant specialist (GPT-5.2, Firecrawl)
 |   +-- eventbot/          Event specialist (GPT-5.2, lu.ma registration)
 |   +-- runner/            Autonomous test loop CLI
 |
@@ -358,9 +408,9 @@ ETHDenver26/
 <td width="50%">
 
 ### On-Chain Governance
-- Passport policies with spending caps
-- Scope and service whitelisting
-- Session key delegation with expiry
+- Passport policies with per-call + daily caps
+- Scope + service allowlists hashed on-chain
+- Session key delegation with expiry + scope subset
 - Instant revocation (one tx, all access gone)
 
 ### x402 Payments
@@ -370,10 +420,10 @@ ETHDenver26/
 - Dual header protocol support
 
 ### Multi-Agent Orchestration
-- GPT-5.2 function-calling decision loops
+- GPT-5.2 function-calling decision loops (Planner)
 - Agents autonomously choose tools
 - Inter-agent email via AgentMail
-- Budget distribution and tracking
+- Wallet-funded inter-agent payments
 
 </td>
 <td width="50%">
@@ -395,7 +445,7 @@ ETHDenver26/
 - Record complete agent runs
 - Replay with exact original timing
 - Bulletproof demo mode
-- Event types: `llm_thinking`, `payment_*`, `browser_session`
+- Event types: `llm_thinking`, `payment_*`, `browser_session`, `agent_*`, `email_*`, `enforcement_step`, `orchestrator_phase`
 
 </td>
 </tr>
